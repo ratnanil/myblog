@@ -1,0 +1,41 @@
+---
+title: "Analyzing a 10 Year old Podcast"
+author: "Nils Ratnaweera"
+date: "2020-02-29T22:00:00+01:00"
+categories: ["R"]
+tags: ["R Markdown", "plot", "regression"]
+---
+
+
+
+<p>I’ve been listening to the german Postcat <a href="http://raumzeit-podcast.de">“Raumzeit”</a> for quite a while now, and I had the idea to visualize some metrics of the podcast using R. I was interested to know what data I can aquire from the podcast and what I could do within it.</p>
+<p>I could’ve aquired quite amount of data on the podcast using it’s RSS feed together with the library <code>tidyRSS</code>, but not all episodes were in that feed so I decided to scrape the podcast’s website instead.</p>
+<div id="number-of-episodes-per-year" class="section level2">
+<h2>Number of Episodes per Year</h2>
+<p>Während in den Anfangsjahren zwischen 4 und 7 Podcasts produziert wurden, erfuhr die Sendung im dritten Jahr einen kleinen Rückgang und eine Pause im vierten Jahr (2015) wo nur zwei Sendungen veröffentlicht wurden. Auch 2017 viel mit drei Podcasts eher Mager aus, wir hoffen auf eine Zunahme in den kommenden Jahren.</p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-1.png" width="672" /><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-2.png" width="672" /></p>
+<p>This is very nice, but I’m not sure if that is all we can get out of the listners reaction to the podcast. I know Tim Pritlove is also an active twitterer, so let’s see what we can get from his tweets. Do do this, I use the package <code>rtweet</code> for which I have created an app as descriebed <a href="https://rtweet.info/articles/auth.html">here</a>.</p>
+<p>I can now get the tweets by @raumzeit using the <code>get_timeline</code> function.</p>
+<p>I perticularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix “RZ” to refer to an episode, regretably, he is not completely concise in this. Non the less, let’s see how many</p>
+<pre><code>## # A tibble: 10 x 2
+## # Groups:   rz_folge [10]
+##    rz_folge     n
+##       &lt;int&gt; &lt;int&gt;
+##  1       NA   445
+##  2       23     5
+##  3       38     5
+##  4       20     4
+##  5       30     4
+##  6        7     3
+##  7        8     3
+##  8       35     3
+##  9       42     3
+## 10        3     2
+## [1] 133</code></pre>
+<p>We’ve got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the epiode. So let’s extract these URLs from the column <code>urls_expanded_url</code>.</p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-14-1.png" width="672" /><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-14-2.png" width="672" /></p>
+</div>
