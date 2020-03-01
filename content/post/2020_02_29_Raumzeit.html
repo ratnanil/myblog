@@ -9,19 +9,145 @@ tags: ["R Markdown", "plot", "regression"]
 
 
 <p>I’ve been listening to the german Postcat <a href="http://raumzeit-podcast.de">“Raumzeit”</a> for quite a while now, and I had the idea to visualize some metrics of the podcast using R. I was interested to know what data I can aquire from the podcast and what I could do within it.</p>
-<p>I could’ve aquired quite amount of data on the podcast using it’s RSS feed together with the library <code>tidyRSS</code>, but not all episodes were in that feed so I decided to scrape the podcast’s website instead.</p>
+<p>I started out using the podcast’s RSS feed with the library <code>tidyRSS</code>, but realized that not all episodes were <em>in</em> that feed. I therefore decided to scrape the podcast’s website instead. I also used <code>rtweet</code> to gather some metrics about the podcast using the tweets by the podcasts host Tim Pritlove, for which he uses the handle @raumzeit. I won’t show all code in this post, but you can get the whole Rmd file on my github page.</p>
+<p>I use the following packages for this analysis, and set the ggplot default theme to <code>theme_classic</code>:</p>
+<pre class="r"><code>library(tidyverse)
+library(lubridate)
+library(rvest)
+library(ggrepel)
+library(scales)
+library(rtweet)
+
+theme_set(theme_classic())</code></pre>
+<div id="scraping-the-site" class="section level2">
+<h2>Scraping the site</h2>
+<p>Using chrome’s element inspector, I retrieved the css class names of the objects that I wanted to extract from the site, as in the following example.</p>
+<pre class="r"><code>show &lt;- read_html(&quot;https://raumzeit-podcast.de/archiv/&quot;) %&gt;%
+  html_nodes(&quot;.show&quot;)
+
+
+titles &lt;- show %&gt;%
+  html_nodes(&quot;.show__title&quot;) %&gt;%
+  html_text() %&gt;%
+  str_trim(&quot;both&quot;)</code></pre>
+<p>Once I had all the data together, I gathered them in a <code>tibble</code> and couls start my analysis.</p>
+<pre class="r"><code>folgenuebersicht &lt;- tibble(title = titles, date = dates,duration = durations, item_link = item_link) %&gt;%
+  mutate(
+    rz_folge = as.integer(str_match(title,&quot;RZ(\\d{3})\\s&quot;)[,2]),
+    title_clean = str_remove(title,&quot;RZ\\d{3}\\s&quot;)
+  )</code></pre>
+</div>
 <div id="number-of-episodes-per-year" class="section level2">
 <h2>Number of Episodes per Year</h2>
-<p>Während in den Anfangsjahren zwischen 4 und 7 Podcasts produziert wurden, erfuhr die Sendung im dritten Jahr einen kleinen Rückgang und eine Pause im vierten Jahr (2015) wo nur zwei Sendungen veröffentlicht wurden. Auch 2017 viel mit drei Podcasts eher Mager aus, wir hoffen auf eine Zunahme in den kommenden Jahren.</p>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>The first Episode was released end of 2010 and in 2011, Tim Pritlove published 25 episodes, the highest number of episodes he would ever publish thereafter. His project was initially funded by ESA and the Zeiss Grossplantarium, and when the two sponsors ended their conract in 2013, Tim took a break to regroup and find a different method to finance his podcast. He found a way and as of 2015, has be been steadily growing the number of episodes published each year.</p>
+<p>This story can be seen in a simple count of episodes per year:</p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doen’t really keep an eye on the time. This means that the podcast duration can very significantly, and I had wondered if there was some trend over time. Apperently, this does not seem to be the case, as shown in the following graph:</p>
 <p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-1.png" width="672" /><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-2.png" width="672" /></p>
+</div>
+<div id="listner-interaction" class="section level2">
+<h2>Listner interaction</h2>
+<pre class="r"><code>replies &lt;- map_dfr(folgenuebersicht$item_link,function(x){
+  vcard &lt;- x %&gt;%
+    read_html() %&gt;%
+    html_nodes(&quot;.comment-author.vcard&quot;) %&gt;%
+    html_text() %&gt;%
+    str_remove_all(&quot;\t|\n&quot;) 
+
+  who &lt;- str_match(vcard,&quot;(.+)\\ssagte&quot;)[,2]
+  datum &lt;- str_match(vcard,&quot;\\sam\\s(\\d+\\.\\s\\w+\\s\\d{4})\\sum&quot;)[,2]
+  zeit &lt;- str_match(vcard,&quot;\\sum\\s(\\d+:\\d+)\\s&quot;)[,2]
+  
+  datumzeit &lt;- as.character(as.POSIXct(paste(datum,zeit),format = &quot;%d. %B %Y %H:%M&quot;))
+  tibble(item_link = x, reply_author = who, reply_date = datumzeit)
+})</code></pre>
+<pre class="r"><code># https://stackoverflow.com/a/43626186/4139249
+replies &lt;- replies %&gt;%
+  mutate(reply_date = as.POSIXct(reply_date))
+
+folgen_replies &lt;- left_join(folgenuebersicht,replies,by = &quot;item_link&quot;)
+
+c_trans &lt;- function(a, b, breaks = b$breaks, format = b$format) {
+  a &lt;- as.trans(a)
+  b &lt;- as.trans(b)
+
+  name &lt;- paste(a$name, b$name, sep = &quot;-&quot;)
+
+  trans &lt;- function(x) a$trans(b$trans(x))
+  inv &lt;- function(x) b$inverse(a$inverse(x))
+
+  trans_new(name, trans, inverse = inv, breaks = breaks, format=format)
+
+}
+
+rev_date &lt;- c_trans(&quot;reverse&quot;, &quot;time&quot;)
+ggplot(folgen_replies, aes(date,reply_date,colour = factor(date))) +
+  geom_line()+
+  geom_point() +
+  scale_y_continuous(trans = rev_date)+
+  geom_point(data = folgen_replies, aes(date,date), colour = &quot;black&quot;) +
+  theme(
+    legend.position = &quot;none&quot;,
+    # axis.text.x = element_blank(),
+    # axis.ticks.x = element_blank(),
+    # axis.title.x = element_blank()
+    ) +
+  labs(y = &quot;Episode Release Date\nand Date of Reply&quot;, x = &quot;Episode Release Date&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<pre class="r"><code>folgen_replies_filter &lt;-  filter(folgen_replies,year(date)&lt;2015)
+
+ggplot(folgen_replies_filter,aes(date,reply_date,colour = factor(date))) +
+  geom_line()+
+  geom_point() +
+  scale_y_continuous(trans = rev_date)+
+  geom_point(data = folgen_replies_filter, aes(date,date), colour = &quot;black&quot;) +
+  theme(
+    legend.position = &quot;none&quot;,
+    # axis.text.x = element_blank(),
+    # axis.ticks.x = element_blank(),
+    # axis.title.x = element_blank()
+    ) +
+  labs(y = &quot;Episode Release Date\nand Date of Reply&quot;, x = &quot;Episode Release Date&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<pre class="r"><code>folgen_replies_smry &lt;- folgen_replies %&gt;%
+  group_by_at(1:6) %&gt;%
+  count(name = &quot;Replies&quot;) %&gt;%
+  arrange(-Replies) %&gt;%
+  ungroup() %&gt;%
+  mutate(
+    title_clean = fct_reorder(title_clean,Replies)
+    )
+
+folgen_replies_smry %&gt;%
+  head(20) %&gt;%
+  ggplot(aes(title_clean,Replies)) +
+  geom_col() +
+  ggplot2::coord_flip() +
+  labs(y = &quot;# Replies&quot;,x = &quot;&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<pre class="r"><code>
+folgen_replies_smry %&gt;%
+  ggplot(aes(date,Replies)) +
+  geom_point() +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE) +
+  labs(y = &quot;# Replies&quot;,x = &quot;Release Date&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-10-2.png" width="672" /></p>
 <p>This is very nice, but I’m not sure if that is all we can get out of the listners reaction to the podcast. I know Tim Pritlove is also an active twitterer, so let’s see what we can get from his tweets. Do do this, I use the package <code>rtweet</code> for which I have created an app as descriebed <a href="https://rtweet.info/articles/auth.html">here</a>.</p>
+<pre class="r"><code>token &lt;- create_token(
+  app = &quot;my_appname&quot;,
+  consumer_key = &quot;my_key&quot;,
+  consumer_secret = &quot;my_secret_key&quot;)</code></pre>
 <p>I can now get the tweets by @raumzeit using the <code>get_timeline</code> function.</p>
+<pre class="r"><code>raumtweets &lt;- get_timeline(&quot;raumzeit&quot;, n = 3200)</code></pre>
 <p>I perticularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix “RZ” to refer to an episode, regretably, he is not completely concise in this. Non the less, let’s see how many</p>
-<pre><code>## # A tibble: 10 x 2
+<pre class="r"><code>raumtweets$rz_folge &lt;- as.integer(str_match(raumtweets$text,&quot;RZ(\\d{1,3})&quot;)[,2])
+
+raumtweets %&gt;%
+  group_by(rz_folge) %&gt;%
+  count() %&gt;%
+  arrange(desc(n)) %&gt;%
+  head(10)
+## # A tibble: 10 x 2
 ## # Groups:   rz_folge [10]
 ##    rz_folge     n
 ##       &lt;int&gt; &lt;int&gt;
@@ -35,7 +161,45 @@ tags: ["R Markdown", "plot", "regression"]
 ##  8       35     3
 ##  9       42     3
 ## 10        3     2
+
+sum(!is.na(raumtweets$rz_folge))
 ## [1] 133</code></pre>
 <p>We’ve got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the epiode. So let’s extract these URLs from the column <code>urls_expanded_url</code>.</p>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-14-1.png" width="672" /><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-14-2.png" width="672" /></p>
+<pre class="r"><code>raumtweets$item_link &lt;- map_chr(raumtweets$urls_expanded_url,function(x){
+  out &lt;- x[str_detect(x,&quot;raumzeit-podcast.de/\\d{4}&quot;)]
+  ifelse(length(out)&lt;0,NA_character_,out)
+  })</code></pre>
+<pre class="r"><code>
+raumtweets_folgen &lt;- raumtweets %&gt;%
+  left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,item_link), by = &quot;item_link&quot;) %&gt;%
+  left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,rz_folge), by = &quot;rz_folge&quot;) %&gt;%
+  mutate(
+    title_clean = coalesce(title_clean.x,title_clean.y),
+    date = coalesce(date.x,date.y)
+  ) %&gt;%
+  select(-c(title_clean.x,title_clean.y,date.x,date.y)) %&gt;%
+  filter(!is.na(title_clean))
+
+raumtweets_folgen_smry &lt;- raumtweets_folgen %&gt;%
+  group_by(title_clean,date) %&gt;% 
+  summarise_at(vars(favorite_count,retweet_count,reply_count),max, na.rm = TRUE)
+
+
+raumtweets_folgen_smry_filter &lt;- filter(raumtweets_folgen_smry,retweet_count&gt;30)
+ggplot(raumtweets_folgen_smry, aes(date,retweet_count,label = title_clean)) +
+  geom_point() +
+  geom_point(data = raumtweets_folgen_smry_filter,colour = &quot;red&quot;) +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE) +
+  geom_label_repel(data = raumtweets_folgen_smry_filter,nudge_x = 5,nudge_y = 5) +
+  labs(x = &quot;Publish Date&quot;, y = &quot;Retweet Count (Maxium)&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<pre class="r"><code>
+raumtweets_folgen_smry_filter = filter(raumtweets_folgen_smry,favorite_count&gt;70)
+ggplot(raumtweets_folgen_smry, aes(date,favorite_count,label = title_clean)) +
+  geom_point() +
+  geom_point(data = raumtweets_folgen_smry_filter, colour = &quot;red&quot;) +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE)  +
+  geom_label_repel(data = raumtweets_folgen_smry_filter, nudge_x = 5,nudge_y = 5) +
+  labs(x = &quot;Publish Date&quot;, y = &quot;Favorites Count (Maxium)&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-16-2.png" width="672" /></p>
 </div>

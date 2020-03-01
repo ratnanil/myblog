@@ -4,3 +4,4 @@ title: About
 ---
 
 I need a place where I can publish my half-baked ideas / side projects, in the hope that I will bake them some more since they are publicly visible.
+  
