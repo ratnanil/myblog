@@ -1,0 +1,1 @@
+My very first and only blog, currently hostet on https://boring-galileo-aba737.netlify.com/
