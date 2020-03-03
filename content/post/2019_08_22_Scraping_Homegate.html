@@ -1,0 +1,223 @@
+---
+title: "Scraping Homegate.ch real estate data"
+author: "Nils Ratnaweera"
+date: "2019-08-22T22:00:00+01:00"
+categories: ["R"]
+tags: ["R Markdown", "plot", "regression"]
+---
+
+
+
+<pre class="r"><code>start &lt;- Sys.time()
+library(tidyverse)
+library(xml2)
+library(rvest)
+library(magrittr)
+library(tmaptools)
+library(sf)
+library(pander)
+library(DT)
+library(DBI)
+library(httr)
+library(jsonlite)
+library(lubridate)
+
+
+replace_umlauts &lt;- function(string){
+  string %&gt;%
+    gsub(&quot;ä&quot;,&quot;a&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;ö&quot;,&quot;o&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;ü&quot;,&quot;u&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;è&quot;,&quot;e&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;é&quot;,&quot;e&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;à&quot;,&quot;a&quot;,.,ignore.case = TRUE) %&gt;%
+    gsub(&quot;ë&quot;,&quot;e&quot;,.,ignore.case = TRUE)
+}
+
+
+# Takes the direkt link to the wohnung and returns a dataframe with title and description of the wohnung
+get_full_description &lt;- function(url){
+  all &lt;- read_html(url) %&gt;%
+    html_nodes(&quot;.detail-description&quot;)
+  
+  title &lt;- all %&gt;%
+    html_nodes(&quot;.title&quot;) %&gt;%
+    html_text()
+  
+  text &lt;- all %&gt;%
+    html_nodes(&quot;.description-content&quot;) %&gt;%
+    html_text()
+  
+  data_frame(title = title, text = text)
+}
+
+
+scrape_page &lt;- function(url){
+
+  webpage &lt;- read_html(url)
+
+  data &lt;- webpage %&gt;%
+    html_nodes(&quot;.result-item-list&quot;) %&gt;%
+    html_nodes(&quot;.anchored&quot;)%&gt;%
+    # head(1) -&gt; x
+  map_dfr(function(x){
+    data &lt;- x %&gt;% 
+      html_nodes(&quot;li&quot;) %&gt;%
+      map_dfr(function(x){
+      key &lt;- x %&gt;%
+        html_nodes(&quot;.key&quot;) %&gt;%
+        html_text() %&gt;%
+        ifelse(length(.) == 0,&quot;&quot;,.)
+      
+      if(key == &quot;Adresse&quot;){
+        val &lt;- x%&gt;%
+          html_nodes(&quot;.value&quot;) %&gt;%
+          xml_find_all(&quot;.//text()&quot;) %&gt;%
+          html_text()
+        key &lt;- c(&quot;Strasse&quot;,&quot;PLZ_Ort&quot;)
+      }else{
+        val &lt;- x %&gt;%
+          html_nodes(&quot;.value&quot;) %&gt;%
+          html_text() %&gt;%
+          ifelse(length(.) == 0,&quot;&quot;,.)
+      }
+      
+      tibble(key = key, value = val) %&gt;%
+        filter(key != &quot;&quot;,key !=&quot;Sonstiges&quot;,key != &quot;Kontakt&quot;)
+  })
+    
+    preis = html_nodes(x, &quot;.item-content-label&quot;) %&gt;%
+      html_text(trim = TRUE) #%&gt;% str_remove_all(&quot;[\r\n]&quot;) %&gt;% str_remove_all(&quot;-|&#39;|–|\\.&quot;)
+    
+    link = html_nodes(x,&quot;.detail-page-link.box-row--link&quot;) %&gt;%
+      html_attr(&quot;href&quot;)
+    
+    title &lt;- html_nodes(x, &quot;.item-content&quot;) %&gt;%
+      html_nodes(&quot;.item-title&quot;) %&gt;%
+      html_text()
+  
+    description1 &lt;- html_nodes(x, &quot;.item-content&quot;) %&gt;%
+      html_nodes(&quot;.item-description-long&quot;) %&gt;%
+      html_text() 
+    
+    description2 &lt;- html_nodes(x, &quot;.item-content&quot;) %&gt;%
+      html_nodes(&quot;.item-description&quot;) %&gt;%
+      html_text() 
+    
+    description &lt;- ifelse(length(description1)&gt;0,description1,description2)
+
+    data %&gt;%
+      spread(key,value) %&gt;%
+        mutate(
+          link = link,
+          preis = preis,
+          title = title,
+          description_short = description,
+          scrapetime_utc = with_tz(Sys.time(),&quot;UTC&quot;)
+          ) 
+
+  }) %&gt;%
+  janitor::clean_names()
+  return(data)
+}
+
+
+
+scrape_plz &lt;- function(plz,method = &quot;mieten&quot;){
+  
+  stopifnot(method %in% c(&quot;kaufen&quot;,&quot;mieten&quot;))
+  stopifnot(grepl(&quot;\\d{4}&quot;,plz))
+  url &lt;- paste0(&quot;https://www.homegate.ch/&quot;,method,&quot;/immobilien/plz-&quot;,plz,&quot;/trefferliste?tab=list&amp;o=sortToplisting-desc&quot;)
+  
+  paginator_counter &lt;- read_html(url) %&gt;%
+    html_nodes(&quot;.paginator-counter&quot;) 
+  
+  if(length(paginator_counter)&gt;0){
+    to &lt;- paginator_counter %&gt;%
+    html_nodes(&quot;span&quot;) %&gt;%
+    extract2(2) %&gt;%
+    html_text() %&gt;%
+    parse_number()
+  
+  data &lt;- 1:to %&gt;%
+    map_dfr(~scrape_page(paste0(url,&quot;&amp;ep=&quot;,.x)))
+  } else{
+    data &lt;- tibble(.rows = 1) %&gt;%
+      mutate(scrapetime_utc = with_tz(Sys.time(),&quot;UTC&quot;))
+  }
+  
+  data$angebot &lt;- method
+  data$scrape_plz &lt;- plz
+  
+  return(data)
+  
+}
+
+umlaute &lt;- &quot;[^(ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\\d\\s\\.\\-\\/\\+)]&quot;
+
+
+
+
+conn = dbConnect(
+  RPostgreSQL::PostgreSQL(),
+  host = &quot;000.00.000.00&quot;, 
+  dbname = &quot;immodata&quot;,
+  user = &quot;user&quot;,
+  password = &quot;password&quot;
+)</code></pre>
+<pre class="r"><code>scrape_log &lt;- tbl(conn,&quot;scrape_raw_4&quot;) %&gt;%
+  group_by(scrape_plz) %&gt;%
+  summarise(
+    last_scrape = max(scrapetime_utc, na.rm = TRUE)
+  )
+  
+  
+PLZ &lt;- tbl(conn,&quot;PLZO_PLZ&quot;) %&gt;%
+  select(PLZ) %&gt;%
+  group_by(PLZ) %&gt;%
+  summarise()
+
+
+
+
+plz_next_up &lt;- left_join(PLZ,scrape_log,by = c(&quot;PLZ&quot; = &quot;scrape_plz&quot;)) %&gt;%
+  mutate(
+    never_scraped = is.na(last_scrape)
+  ) %&gt;%
+  arrange(desc(never_scraped),last_scrape,PLZ) %&gt;%
+  head(10) %&gt;%
+  collect() %&gt;%
+  mutate(
+    last_scrape = with_tz(last_scrape,&quot;UTC&quot;),
+    days_since_last = as.numeric(difftime(with_tz(Sys.time(),&quot;UTC&quot;),last_scrape, units = &quot;days&quot;))
+    )</code></pre>
+<pre class="r"><code>plz_next_up &lt;- plz_next_up %&gt;%
+  filter(days_since_last&gt;7 | is.na(days_since_last))
+
+plz_next_up
+
+
+run_scrape &lt;- nrow(plz_next_up)&gt;0</code></pre>
+<pre class="r"><code>data_raw &lt;- plz_next_up$PLZ %&gt;%
+  map_dfr(function(x){
+    data_mieten &lt;- tryCatch(scrape_plz(x,&quot;mieten&quot;), error = function(e) tibble(.rows = 1))
+    Sys.sleep(1)
+    data_kaufen &lt;- tryCatch(scrape_plz(x,&quot;kaufen&quot;), error = function(e) tibble(.rows = 1))
+    bind_rows(data_mieten,data_kaufen)
+  }) %&gt;%
+  janitor::clean_names()
+
+data_raw$rows &lt;- NULL
+
+
+dbWriteTable(conn, &quot;scrape_raw_4&quot;, data_raw, row.names=FALSE, append=TRUE)
+
+
+DT::datatable(data_raw)
+
+
+dbDisconnect(conn)</code></pre>
+<pre class="r"><code>pandoc.p(paste(&quot;Um&quot;,Sys.time(),&quot;wurde der scrape job erfolgreich mit folgenden Postleitzahlen durchgeführt: &quot;,paste(plz_next_up$PLZ,collapse = &quot;, &quot;),&quot;. Anzahl Zeilen: &quot;,nrow(data_raw)))
+
+duration &lt;- round(difftime(Sys.time(),start),2)
+pandoc.p(paste(&quot;Der ganze Prozess dauerte:&quot;,duration,attr(duration,&quot;units&quot;)))</code></pre>
