@@ -3,7 +3,7 @@ title: "Analyzing a 10 Year old Podcast"
 author: "Nils Ratnaweera"
 date: "2020-02-29T22:00:00+01:00"
 categories: ["R"]
-tags: ["R Markdown", "plot", "regression"]
+tags: ["webscraping","podcast","R"]
 ---
 
 ```{r setup, include=FALSE}

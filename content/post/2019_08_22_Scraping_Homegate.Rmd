@@ -1,9 +1,9 @@
 ---
-title: "Scraping Homegate.ch real estate data"
+title: "Scraping real estate data"
 author: "Nils Ratnaweera"
 date: "2019-08-22T22:00:00+01:00"
 categories: ["R"]
-tags: ["R Markdown", "plot", "regression"]
+tags: ["webscraping","R"]
 ---
 
 ```{r setup, include=FALSE}
@@ -13,48 +13,19 @@ knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 
 ```{r, warning=FALSE, message=FALSE}
 
-start <- Sys.time()
 library(tidyverse)
-library(xml2)
+# library(xml2)
 library(rvest)
-library(magrittr)
-library(tmaptools)
-library(sf)
-library(pander)
-library(DT)
-library(DBI)
-library(httr)
-library(jsonlite)
+# library(magrittr)
+# library(tmaptools)
+# library(sf)
+# library(pander)
+# library(DT)
+# library(DBI)
+# library(httr)
+# library(jsonlite)
 library(lubridate)
 
-
-replace_umlauts <- function(string){
-  string %>%
-    gsub("ä","a",.,ignore.case = TRUE) %>%
-    gsub("ö","o",.,ignore.case = TRUE) %>%
-    gsub("ü","u",.,ignore.case = TRUE) %>%
-    gsub("è","e",.,ignore.case = TRUE) %>%
-    gsub("é","e",.,ignore.case = TRUE) %>%
-    gsub("à","a",.,ignore.case = TRUE) %>%
-    gsub("ë","e",.,ignore.case = TRUE)
-}
-
-
-# Takes the direkt link to the wohnung and returns a dataframe with title and description of the wohnung
-get_full_description <- function(url){
-  all <- read_html(url) %>%
-    html_nodes(".detail-description")
-  
-  title <- all %>%
-    html_nodes(".title") %>%
-    html_text()
-  
-  text <- all %>%
-    html_nodes(".description-content") %>%
-    html_text()
-  
-  data_frame(title = title, text = text)
-}
 
 
 scrape_page <- function(url){
@@ -62,7 +33,7 @@ scrape_page <- function(url){
   webpage <- read_html(url)
 
   data <- webpage %>%
-    html_nodes(".result-item-list") %>%
+    html_nodes(".ResultListPage_stickyParent_3ocYo.ResultListPage_resultListPage_dpaLE") %>%
     html_nodes(".anchored")%>%
     # head(1) -> x
   map_dfr(function(x){
@@ -158,61 +129,61 @@ scrape_plz <- function(plz,method = "mieten"){
   
 }
 
-umlaute <- "[^(ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\\d\\s\\.\\-\\/\\+)]"
+# umlaute <- "[^(ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\\d\\s\\.\\-\\/\\+)]"
 
 
 
 
-conn = dbConnect(
-  RPostgreSQL::PostgreSQL(),
-  host = "000.00.000.00", 
-  dbname = "immodata",
-  user = "user",
-  password = "password"
-)
+# conn = dbConnect(
+#   RPostgreSQL::PostgreSQL(),
+#   host = "000.00.000.00", 
+#   dbname = "immodata",
+#   user = "user",
+#   password = "password"
+# )
 
 ```
 
 
 
 ```{r}
-scrape_log <- tbl(conn,"scrape_raw_4") %>%
-  group_by(scrape_plz) %>%
-  summarise(
-    last_scrape = max(scrapetime_utc, na.rm = TRUE)
-  )
+# scrape_log <- tbl(conn,"scrape_raw_4") %>%
+#   group_by(scrape_plz) %>%
+#   summarise(
+#     last_scrape = max(scrapetime_utc, na.rm = TRUE)
+#   )
   
   
-PLZ <- tbl(conn,"PLZO_PLZ") %>%
-  select(PLZ) %>%
-  group_by(PLZ) %>%
-  summarise()
+# PLZ <- tbl(conn,"PLZO_PLZ") %>%
+#   select(PLZ) %>%
+#   group_by(PLZ) %>%
+#   summarise()
 
 
 
 
-plz_next_up <- left_join(PLZ,scrape_log,by = c("PLZ" = "scrape_plz")) %>%
-  mutate(
-    never_scraped = is.na(last_scrape)
-  ) %>%
-  arrange(desc(never_scraped),last_scrape,PLZ) %>%
-  head(10) %>%
-  collect() %>%
-  mutate(
-    last_scrape = with_tz(last_scrape,"UTC"),
-    days_since_last = as.numeric(difftime(with_tz(Sys.time(),"UTC"),last_scrape, units = "days"))
-    )
+# plz_next_up <- left_join(PLZ,scrape_log,by = c("PLZ" = "scrape_plz")) %>%
+#   mutate(
+#     never_scraped = is.na(last_scrape)
+#   ) %>%
+#   arrange(desc(never_scraped),last_scrape,PLZ) %>%
+#   head(10) %>%
+#   collect() %>%
+#   mutate(
+#     last_scrape = with_tz(last_scrape,"UTC"),
+#     days_since_last = as.numeric(difftime(with_tz(Sys.time(),"UTC"),last_scrape, units = "days"))
+#     )
 
 ```
 
 ```{r}
-plz_next_up <- plz_next_up %>%
-  filter(days_since_last>7 | is.na(days_since_last))
-
-plz_next_up
-
-
-run_scrape <- nrow(plz_next_up)>0
+# plz_next_up <- plz_next_up %>%
+#   filter(days_since_last>7 | is.na(days_since_last))
+# 
+# plz_next_up
+# 
+# 
+# run_scrape <- nrow(plz_next_up)>0
 
 ```
 
@@ -221,8 +192,7 @@ run_scrape <- nrow(plz_next_up)>0
 
 
 
-
-data_raw <- plz_next_up$PLZ %>%
+data_raw <- c(8820,8805) %>%
   map_dfr(function(x){
     data_mieten <- tryCatch(scrape_plz(x,"mieten"), error = function(e) tibble(.rows = 1))
     Sys.sleep(1)

@@ -1,55 +1,26 @@
 ---
-title: "Scraping Homegate.ch real estate data"
+title: "Scraping real estate data"
 author: "Nils Ratnaweera"
 date: "2019-08-22T22:00:00+01:00"
 categories: ["R"]
-tags: ["R Markdown", "plot", "regression"]
+tags: ["webscraping","R"]
 ---
 
 
 
-<pre class="r"><code>start &lt;- Sys.time()
-library(tidyverse)
-library(xml2)
+<pre class="r"><code>library(tidyverse)
+# library(xml2)
 library(rvest)
-library(magrittr)
-library(tmaptools)
-library(sf)
-library(pander)
-library(DT)
-library(DBI)
-library(httr)
-library(jsonlite)
+# library(magrittr)
+# library(tmaptools)
+# library(sf)
+# library(pander)
+# library(DT)
+# library(DBI)
+# library(httr)
+# library(jsonlite)
 library(lubridate)
 
-
-replace_umlauts &lt;- function(string){
-  string %&gt;%
-    gsub(&quot;ä&quot;,&quot;a&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;ö&quot;,&quot;o&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;ü&quot;,&quot;u&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;è&quot;,&quot;e&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;é&quot;,&quot;e&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;à&quot;,&quot;a&quot;,.,ignore.case = TRUE) %&gt;%
-    gsub(&quot;ë&quot;,&quot;e&quot;,.,ignore.case = TRUE)
-}
-
-
-# Takes the direkt link to the wohnung and returns a dataframe with title and description of the wohnung
-get_full_description &lt;- function(url){
-  all &lt;- read_html(url) %&gt;%
-    html_nodes(&quot;.detail-description&quot;)
-  
-  title &lt;- all %&gt;%
-    html_nodes(&quot;.title&quot;) %&gt;%
-    html_text()
-  
-  text &lt;- all %&gt;%
-    html_nodes(&quot;.description-content&quot;) %&gt;%
-    html_text()
-  
-  data_frame(title = title, text = text)
-}
 
 
 scrape_page &lt;- function(url){
@@ -57,7 +28,7 @@ scrape_page &lt;- function(url){
   webpage &lt;- read_html(url)
 
   data &lt;- webpage %&gt;%
-    html_nodes(&quot;.result-item-list&quot;) %&gt;%
+    html_nodes(&quot;.ResultListPage_stickyParent_3ocYo.ResultListPage_resultListPage_dpaLE&quot;) %&gt;%
     html_nodes(&quot;.anchored&quot;)%&gt;%
     # head(1) -&gt; x
   map_dfr(function(x){
@@ -153,52 +124,52 @@ scrape_plz &lt;- function(plz,method = &quot;mieten&quot;){
   
 }
 
-umlaute &lt;- &quot;[^(ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\\d\\s\\.\\-\\/\\+)]&quot;
+# umlaute &lt;- &quot;[^(ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\\d\\s\\.\\-\\/\\+)]&quot;
 
 
 
 
-conn = dbConnect(
-  RPostgreSQL::PostgreSQL(),
-  host = &quot;000.00.000.00&quot;, 
-  dbname = &quot;immodata&quot;,
-  user = &quot;user&quot;,
-  password = &quot;password&quot;
-)</code></pre>
-<pre class="r"><code>scrape_log &lt;- tbl(conn,&quot;scrape_raw_4&quot;) %&gt;%
-  group_by(scrape_plz) %&gt;%
-  summarise(
-    last_scrape = max(scrapetime_utc, na.rm = TRUE)
-  )
+# conn = dbConnect(
+#   RPostgreSQL::PostgreSQL(),
+#   host = &quot;000.00.000.00&quot;, 
+#   dbname = &quot;immodata&quot;,
+#   user = &quot;user&quot;,
+#   password = &quot;password&quot;
+# )</code></pre>
+<pre class="r"><code># scrape_log &lt;- tbl(conn,&quot;scrape_raw_4&quot;) %&gt;%
+#   group_by(scrape_plz) %&gt;%
+#   summarise(
+#     last_scrape = max(scrapetime_utc, na.rm = TRUE)
+#   )
   
   
-PLZ &lt;- tbl(conn,&quot;PLZO_PLZ&quot;) %&gt;%
-  select(PLZ) %&gt;%
-  group_by(PLZ) %&gt;%
-  summarise()
+# PLZ &lt;- tbl(conn,&quot;PLZO_PLZ&quot;) %&gt;%
+#   select(PLZ) %&gt;%
+#   group_by(PLZ) %&gt;%
+#   summarise()
 
 
 
 
-plz_next_up &lt;- left_join(PLZ,scrape_log,by = c(&quot;PLZ&quot; = &quot;scrape_plz&quot;)) %&gt;%
-  mutate(
-    never_scraped = is.na(last_scrape)
-  ) %&gt;%
-  arrange(desc(never_scraped),last_scrape,PLZ) %&gt;%
-  head(10) %&gt;%
-  collect() %&gt;%
-  mutate(
-    last_scrape = with_tz(last_scrape,&quot;UTC&quot;),
-    days_since_last = as.numeric(difftime(with_tz(Sys.time(),&quot;UTC&quot;),last_scrape, units = &quot;days&quot;))
-    )</code></pre>
-<pre class="r"><code>plz_next_up &lt;- plz_next_up %&gt;%
-  filter(days_since_last&gt;7 | is.na(days_since_last))
-
-plz_next_up
-
-
-run_scrape &lt;- nrow(plz_next_up)&gt;0</code></pre>
-<pre class="r"><code>data_raw &lt;- plz_next_up$PLZ %&gt;%
+# plz_next_up &lt;- left_join(PLZ,scrape_log,by = c(&quot;PLZ&quot; = &quot;scrape_plz&quot;)) %&gt;%
+#   mutate(
+#     never_scraped = is.na(last_scrape)
+#   ) %&gt;%
+#   arrange(desc(never_scraped),last_scrape,PLZ) %&gt;%
+#   head(10) %&gt;%
+#   collect() %&gt;%
+#   mutate(
+#     last_scrape = with_tz(last_scrape,&quot;UTC&quot;),
+#     days_since_last = as.numeric(difftime(with_tz(Sys.time(),&quot;UTC&quot;),last_scrape, units = &quot;days&quot;))
+#     )</code></pre>
+<pre class="r"><code># plz_next_up &lt;- plz_next_up %&gt;%
+#   filter(days_since_last&gt;7 | is.na(days_since_last))
+# 
+# plz_next_up
+# 
+# 
+# run_scrape &lt;- nrow(plz_next_up)&gt;0</code></pre>
+<pre class="r"><code>data_raw &lt;- c(8820,8805) %&gt;%
   map_dfr(function(x){
     data_mieten &lt;- tryCatch(scrape_plz(x,&quot;mieten&quot;), error = function(e) tibble(.rows = 1))
     Sys.sleep(1)

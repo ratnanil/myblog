@@ -1,0 +1,41 @@
+---
+title: "Benchmarking binary predicates"
+author: "Nils Ratnaweera"
+date: "2019-05-19T11:00:00+01:00"
+categories: ["R"]
+tags: ["GIS", "sf","benchmarking","R"]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+library(sf)
+library(tidyverse)
+library(microbenchmark)
+monte_generoso <- st_buffer(st_sfc(st_point(c(722758.81,87648.67)),crs = 21781),1000)
+
+points <- st_make_grid(monte_generoso,50,what = "centers")
+
+ggplot(monte_generoso) + geom_sf() + geom_sf(data = points)
+
+```
+
+
+```{r}
+mbm  <- microbenchmark(
+  intersects = st_intersects(monte_generoso,points),
+  within = st_within(points,monte_generoso),
+  contains = st_contains(monte_generoso,points)
+)
+```
+
+```{r}
+autoplot(mbm)
+```
+
+
