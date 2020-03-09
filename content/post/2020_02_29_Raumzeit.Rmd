@@ -1,5 +1,5 @@
 ---
-title: "Analyzing a 10 Year old Podcast"
+title: "Analysing a 10 Year old Podcast"
 author: "Nils Ratnaweera"
 date: "2020-02-29T22:00:00+01:00"
 categories: ["R"]
@@ -8,13 +8,15 @@ tags: ["webscraping","podcast","R"]
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE)
-
-library(here)
+knitr::opts_chunk$get()
+if(is.null(knitr::opts_knit$get("rmarkdown.pandoc.to"))){
+  setwd("content/post/")
+}
 ```
 
-I've been listening to the german astronomy Postcat ["Raumzeit"](http://raumzeit-podcast.de) for quite a while now, and I had the idea to visualize some metrics of the podcast using R. I was interested to know what data I can aquire from the podcast and what I could do within it. 
+I've been listening to the German astronomy podcast ["Raumzeit"](http://raumzeit-podcast.de) for quite a while now, and I had the idea to visualize some metrics of the podcast using R. I was interested to know what data I can acquire from the podcast and what I could do within it. 
 
-I started out using the podcast's RSS feed with the library `tidyRSS`, but realized that not all episodes were _in_ that feed. I therefore decided to scrape the podcast's website instead. I also used `rtweet` to gather some metrics about the podcast using the tweets by the podcasts host Tim Pritlove, for which he uses the handle \@raumzeit. I won't show all code in this post, but you can get the whole Rmd file on my github page.
+I started out using the podcast's RSS feed with the library `tidyRSS`, but realized that not all episodes were _in_ that feed. I therefore decided to scrape the podcast's website instead. I also used `rtweet` to gather some metrics about the podcast using the tweets by the podcast's host Tim Pritlove, for which he uses the handle \@raumzeit. I won't show all code in this post, but you can get the whole Rmd file on my github page.
 
 
 I use the following packages for this analysis, and set the ggplot default theme to `theme_classic`:
@@ -95,9 +97,9 @@ head(folgenuebersicht)
 ```
 
 
-## Number of Episodes per Year
+### Number of Episodes per Year
 
-The postcast has had different phases over the years and the number of podcasts released yeach year varyies significantly. The first Episode was released end of 2010. In 2011, Tim Pritlove published 25 episodes, the highest number of episodes he would ever publish thereafter. His project was initially funded by ESA and the Zeiss Grossplantarium, and when the two sponsors ended their conract in 2013, Tim took a break to regroup and find a different method to finance his podcast. He found a way and as of 2015, has be been steadily growing the number of episodes published each year.
+The podcast has had different phases over the years and the number of podcast's released each year varies significantly. The first Episode was released end of 2010. In 2011, Tim Pritlove published 25 episodes, the highest number of episodes he would ever publish thereafter. His project was initially funded externally and when the sponsors ended their contact in 2013, Tim took a break to regroup and find a different method to finance his podcast. He found a way and as of 2015, has be been steadily growing the number of episodes published each year.
 
 ```{r, echo = FALSE}
 
@@ -110,7 +112,12 @@ folgenuebersicht %>%
   labs(x = "Year",y = "Number of Episodes")
 ```
 
-What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doen't really keep an eye on the time. This means that the podcast duration can very significantly, and I had wondered if there was some trend over time. Apperently, this does not seem to be the case, as shown in the following graph:
+
+### Episode duration
+
+What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doesn't really keep an eye on the time. In his `r nrow(folgenuebersicht)` podcasts to date he has spent over `r floor(sum(folgenuebersicht$duration)/60)` hours speaking to his guests, which means an avarage of `r floor(sum(folgenuebersicht$duration))/nrow(folgenuebersicht)` minutes per episode.
+
+This means that the podcast duration can very significantly, and I had wondered if there was some trend over time. Apparently, this does not seem to be the case, as shown in the following graph:
 
 ```{r, echo = FALSE}
 
@@ -132,18 +139,20 @@ folgenuebersicht %>%
   labs(x = "Release Date",y = "Episode Duration (in Minutes)")
 ```
 
-## Listner interaction
+The two very short episodes are small housekeeping / information podcasts of which Tim has only produced two.
+
+## Listener interaction
 
 
-I was interested to know, how intense the interaction was in regard to each podcast. I found two metrics with which this can be quantified: 
+I was interested to know how intense the interaction was in regard to each podcast. I found two metrics with which this can be quantified: 
 
 - The number of replies posted on the [podcat's website](https://raumzeit-podcast.de/)
-- Twitter metrics (retweets, favorites, replies) of tweets Tim Pritlove posted after the appearance of a postcast with the user handle \@raumzeit.
+- Twitter metrics (retweets, favourites, replies) of tweets Tim Pritlove posted after the appearance of a podcast with the user handle \@raumzeit.
 
 
 ### Website replies
 
-I scraped the website to retrieve the replies of year postcast using the podcast's link an again, `rvest`:
+I scraped the website to retrieve the replies of year podcast using the podcast's link an again, `rvest`:
 
 ```{r}
 head(folgenuebersicht)
@@ -181,8 +190,9 @@ load("replies.Rda")
 head(replies)
 ```
 
+### Website replies
 
-I want to visualize the replies of each postcast smiliar to a beaded curtain, where each vertical strand represents a conversation concerning one episode and each "bead" representining a post. 
+I was expecting some podcasts to have a high listener interaction and much discussion over time while others probabbly provoked little or no listener interaction. Old episodes have had a longer time period for such interaction, and so i wanted to visualize the intensity of the interaction (i.e. replies) in such a way, that this aspect becomes apparent.
 
 ```{r, echo = FALSE}
 # https://stackoverflow.com/a/43626186/4139249
@@ -208,10 +218,11 @@ rev_date <- c_trans("reverse", "time")
 
 
 ```{r, echo = FALSE}
-ggplot(folgen_replies, aes(rz_folge,reply_date,colour = factor(rz_folge))) +
+ggplot(folgen_replies, aes(rz_folge,reply_date,colour = factor(rz_folge),label = title_clean)) +
   geom_line()+
   geom_point(colour = "white", size = 3) +
   geom_point() +
+  scale_colour_viridis_d() +
   scale_y_continuous(trans = rev_date)+
   theme(legend.position = "none",
         axis.title.x = element_blank(),
@@ -257,7 +268,7 @@ folgen_replies_smry %>%
 ```
 
 
-
+### Twitter Data
 
 ```{r, eval = FALSE, warning=FALSE}
 token <- create_token(
@@ -274,19 +285,22 @@ raumtweets <- get_timeline("raumzeit", n = 3200)
 
 ```{r, include=FALSE}
 load("raumtweets.Rda")
+raumtweets <- raumtweets %>%
+  filter(!is_retweet) %>%
+  dplyr::select(created_at,text,favorite_count,retweet_count,urls_expanded_url)
 ```
 
 ```{r}
 head(raumtweets)
 ```
 
-I perticularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix "RZ" to refer to an episode, regretably, he is not completely concise in this. Non the less, let's see how many 
+I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix "RZ" to refer to an episode, regrettably, he is not completely concise in this. Non the less, let's see how many 
 
 ```{r}
 raumtweets$rz_folge <- as.integer(str_match(raumtweets$text,"RZ(\\d{1,3})")[,2])
 ```
 
-We've got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the epiode. So let's extract these URLs from the column `urls_expanded_url`.
+We've got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the episode. So let's extract these URLs from the column `urls_expanded_url`.
 
 ```{r}
 raumtweets$item_link <- map_chr(raumtweets$urls_expanded_url,function(x){
@@ -309,31 +323,39 @@ raumtweets_folgen <- raumtweets %>%
   select(-c(title_clean.x,title_clean.y,date.x,date.y)) %>%
   filter(!is.na(title_clean))
 
-raumtweets_folgen_smry <- raumtweets_folgen %>%
-  group_by(title_clean,date) %>% 
-  summarise_at(vars(favorite_count,retweet_count,reply_count),max, na.rm = TRUE)
+# raumtweets_folgen_smry <- raumtweets_folgen %>%
+  # group_by(created_at,title_clean,date) %>% 
+  # summarise_at(vars(favorite_count,retweet_count),max, na.rm = TRUE)
 
 
-raumtweets_folgen_smry_filter <- filter(raumtweets_folgen_smry,retweet_count>30)
+raumtweets_folgen_filter <- filter(raumtweets_folgen,retweet_count>30)
 ```
 
 
 ```{r}
-ggplot(raumtweets_folgen_smry, aes(date,retweet_count,label = title_clean)) +
+ggplot(raumtweets_folgen, aes(created_at,retweet_count,label = title_clean)) +
   geom_point() +
-  geom_point(data = raumtweets_folgen_smry_filter,colour = "red") +
+  theme(legend.position = "none") +
+  geom_point(data = raumtweets_folgen_filter,colour = "red") +
   geom_smooth(method = "loess",se = FALSE) +
-  geom_label_repel(data = raumtweets_folgen_smry_filter,nudge_x = 5,nudge_y = 5) +
-  labs(x = "Publish Date", y = "Retweet Count (Maxium)")
+  geom_label_repel(data = raumtweets_folgen_filter,nudge_x = 5,nudge_y = 5) +
+  labs(x = "Tweet Date", y = "Retweet Count")
 
-raumtweets_folgen_smry_filter = filter(raumtweets_folgen_smry,favorite_count>70)
-ggplot(raumtweets_folgen_smry, aes(date,favorite_count,label = title_clean)) +
+raumtweets_folgen_filter <- filter(raumtweets_folgen,favorite_count>70)
+ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
   geom_point() +
-  geom_point(data = raumtweets_folgen_smry_filter, colour = "red") +
+  geom_point(data = raumtweets_folgen_filter, colour = "red") +
   geom_smooth(method = "loess",se = FALSE)  +
-  geom_label_repel(data = raumtweets_folgen_smry_filter, nudge_x = 5,nudge_y = 5) +
-  labs(x = "Publish Date", y = "Favorites Count (Maxium)")
+  geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
+  labs(x = "Tweet Date", y = "Favourites Count")
 
+```
+
+
+```{r}
+ggplot(raumtweets_folgen, aes(favorite_count,retweet_count)) +
+  geom_point() +
+  geom_smooth(method = "lm")
 ```
 
 

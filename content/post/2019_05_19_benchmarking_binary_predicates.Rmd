@@ -12,16 +12,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r}
+```{r, warning=FALSE,message=FALSE}
 
 library(sf)
 library(tidyverse)
 library(microbenchmark)
 monte_generoso <- st_buffer(st_sfc(st_point(c(722758.81,87648.67)),crs = 21781),1000)
 
-points <- st_make_grid(monte_generoso,50,what = "centers")
+points <- st_sample(st_buffer(monte_generoso,1000),1000,what = "centers")
 
-ggplot(monte_generoso) + geom_sf() + geom_sf(data = points)
+ggplot() + 
+  geom_sf(data = points)+
+  geom_sf(data = monte_generoso,fill = "red",alpha = 0.5) + 
+  theme_void()
 
 ```
 
@@ -30,12 +33,46 @@ ggplot(monte_generoso) + geom_sf() + geom_sf(data = points)
 mbm  <- microbenchmark(
   intersects = st_intersects(monte_generoso,points),
   within = st_within(points,monte_generoso),
-  contains = st_contains(monte_generoso,points)
+  contains = st_contains(monte_generoso,points),
+  times = 100
 )
+
 ```
 
 ```{r}
 autoplot(mbm)
+```
+
+
+```{r}
+
+ou <- map_dfr(c(10,100,500,1000,5000,10000),function(x){
+  
+  points <- st_sample(st_buffer(monte_generoso,1000),x,what = "centers")
+
+  mbm  <- microbenchmark(
+  intersects = st_intersects(monte_generoso,points),
+  within = st_within(points,monte_generoso),
+  contains = st_contains(monte_generoso,points),
+  times = 10
+  )
+  as.data.frame(mbm) %>%
+    mutate(n = x)
+})
+
+ou %>%
+  mutate(time = time/1e9) %>%
+  group_by(expr,n) %>%
+  summarise(
+    mean = mean(time),
+    q25 = quantile(time,0.25),
+    q75 = quantile(time,0.75)
+  ) %>%
+ggplot(aes(n,mean, colour = expr)) +
+  geom_line() +
+  geom_pointrange(aes(ymin = q25,ymax = q75)) +
+  labs(x = "# data points",y = "Duration (seconds)", colour = "Binary Predicate Operation") +
+  theme(legend.position = "bottom")
 ```
 
 
