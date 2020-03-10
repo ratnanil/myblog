@@ -323,10 +323,6 @@ raumtweets_folgen <- raumtweets %>%
   select(-c(title_clean.x,title_clean.y,date.x,date.y)) %>%
   filter(!is.na(title_clean))
 
-# raumtweets_folgen_smry <- raumtweets_folgen %>%
-  # group_by(created_at,title_clean,date) %>% 
-  # summarise_at(vars(favorite_count,retweet_count),max, na.rm = TRUE)
-
 
 raumtweets_folgen_filter <- filter(raumtweets_folgen,retweet_count>30)
 ```
@@ -349,13 +345,6 @@ ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
   geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
   labs(x = "Tweet Date", y = "Favourites Count")
 
-```
-
-
-```{r}
-ggplot(raumtweets_folgen, aes(favorite_count,retweet_count)) +
-  geom_point() +
-  geom_smooth(method = "lm")
 ```
 
 

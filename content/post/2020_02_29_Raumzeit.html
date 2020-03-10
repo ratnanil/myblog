@@ -169,10 +169,6 @@ folgen_replies_smry %&gt;%
   select(-c(title_clean.x,title_clean.y,date.x,date.y)) %&gt;%
   filter(!is.na(title_clean))
 
-# raumtweets_folgen_smry &lt;- raumtweets_folgen %&gt;%
-  # group_by(created_at,title_clean,date) %&gt;% 
-  # summarise_at(vars(favorite_count,retweet_count),max, na.rm = TRUE)
-
 
 raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,retweet_count&gt;30)</code></pre>
 <pre class="r"><code>ggplot(raumtweets_folgen, aes(created_at,retweet_count,label = title_clean)) +
@@ -192,9 +188,5 @@ ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
   geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
   labs(x = &quot;Tweet Date&quot;, y = &quot;Favourites Count&quot;)</code></pre>
 <p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-26-2.png" width="672" /></p>
-<pre class="r"><code>ggplot(raumtweets_folgen, aes(favorite_count,retweet_count)) +
-  geom_point() +
-  geom_smooth(method = &quot;lm&quot;)</code></pre>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
 </div>
 </div>
