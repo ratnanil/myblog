@@ -155,7 +155,7 @@ ggplot(aes(n,median, colour = expr)) +
 
 Nope.. still too slow by a long way. Unexpected for me however, is the fact that the number of polygons does not slow the process. Take home message: use `st_contains` when you can.
 
-![too slow](too_slow.gif)
+![too slow](https://i.makeagif.com/media/6-06-2018/BOq_ui.gif)
 
 
 
