@@ -161,18 +161,20 @@ head(folgenuebersicht)
 
 ```{r, eval = FALSE}
 replies <- map_dfr(folgenuebersicht$item_link,function(x){
-  vcard <- x %>%
+  comment <- x %>%
     read_html() %>%
-    html_nodes(".comment-author.vcard") %>%
+    html_nodes(".comment") %>%
     html_text() %>%
     str_remove_all("\t|\n") 
-
+  vcard <- map_chr(comment,~str_split_fixed(.x,"\\s:",2)[1])
+  comment_text <- map_chr(comment,~str_split_fixed(.x,"\\s:",2)[2])
+  
   who <- str_match(vcard,"(.+)\\ssagte")[,2]
   datum <- str_match(vcard,"\\sam\\s(\\d+\\.\\s\\w+\\s\\d{4})\\sum")[,2]
-  zeit <- str_match(vcard,"\\sum\\s(\\d+:\\d+)\\s")[,2]
-  
+  zeit <- str_match(vcard,"\\sum\\s(\\d+:\\d+)")[,2]
+
   datumzeit <- as.character(as.POSIXct(paste(datum,zeit),format = "%d. %B %Y %H:%M"))
-  tibble(item_link = x, reply_author = who, reply_date = datumzeit)
+  tibble(item_link = x, reply_author = who, reply_date = datumzeit, comment = comment_text)
 }) %>%
   mutate(reply_date = as.POSIXct(reply_date))
 ```
@@ -218,6 +220,7 @@ rev_date <- c_trans("reverse", "time")
 
 
 ```{r, echo = FALSE}
+
 ggplot(folgen_replies, aes(rz_folge,reply_date,colour = factor(rz_folge),label = title_clean)) +
   geom_line()+
   geom_point(colour = "white", size = 3) +
@@ -268,6 +271,23 @@ folgen_replies_smry %>%
 ```
 
 
+```{r}
+library(tidytext)
+folgen_replies_unnest <- folgen_replies %>%
+  unnest_tokens(word,comment)
+
+stopwords <- tidytext::get_stopwords("de")
+
+folgen_replies_unnest <- folgen_replies_unnest %>%
+  anti_join(stopwords, by = "word")
+
+
+folgen_replies_unnest %>%
+  count(word,sort = TRUE) 
+
+```
+
+
 ### Twitter Data
 
 ```{r, eval = FALSE, warning=FALSE}
@@ -294,15 +314,15 @@ raumtweets <- raumtweets %>%
 head(raumtweets)
 ```
 
-I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix "RZ" to refer to an episode, regrettably, he is not completely concise in this. Non the less, let's see how many 
+I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix "RZ" to refer to an episode, regrettably, he is not completely concise in this. Non the less, let's see how many episodes we can matchi in this way.
 
-```{r}
+```{r, echo = TRUE}
 raumtweets$rz_folge <- as.integer(str_match(raumtweets$text,"RZ(\\d{1,3})")[,2])
 ```
 
 We've got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the episode. So let's extract these URLs from the column `urls_expanded_url`.
 
-```{r}
+```{r, echo = TRUE}
 raumtweets$item_link <- map_chr(raumtweets$urls_expanded_url,function(x){
   out <- x[str_detect(x,"raumzeit-podcast.de/\\d{4}")]
   ifelse(length(out)<0,NA_character_,out)
@@ -310,6 +330,12 @@ raumtweets$item_link <- map_chr(raumtweets$urls_expanded_url,function(x){
 
 ```
 
+We can see how many tweets we were able to assign with the two methods using `table()`
+This shows that the first method was more successful than the second method.
+
+```{r, echo = TRUE}
+table(!is.na(raumtweets$rz_folge),!is.na(raumtweets$item_link))
+```
 
 
 ```{r}

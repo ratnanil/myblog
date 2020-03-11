@@ -47,7 +47,7 @@ titles &lt;- class_show %&gt;%
 </div>
 <div id="episode-duration" class="section level3">
 <h3>Episode duration</h3>
-<p>What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doesn’t really keep an eye on the time. In his 86 podcasts to date he has spent over 143 hours speaking to his guests, which means an avarage of 100.0348837 minutes per episode.</p>
+<p>What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doesn’t really keep an eye on the time. In his 87 podcasts to date he has spent over 145 hours speaking to his guests, which means an avarage of 100.2068966 minutes per episode.</p>
 <p>This means that the podcast duration can very significantly, and I had wondered if there was some trend over time. Apparently, this does not seem to be the case, as shown in the following graph:</p>
 <p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
 <p>The two very short episodes are small housekeeping / information podcasts of which Tim has only produced two.</p>
@@ -67,45 +67,47 @@ titles &lt;- class_show %&gt;%
 ## # A tibble: 6 x 6
 ##   title     date                duration item_link         rz_folge title_clean 
 ##   &lt;chr&gt;     &lt;dttm&gt;                 &lt;dbl&gt; &lt;chr&gt;                &lt;int&gt; &lt;chr&gt;       
-## 1 RZ084 Be~ 2020-02-07 00:00:00      123 https://raumzeit~       84 Besuch beim~
-## 2 RZ083 Sp~ 2020-01-17 00:00:00      164 https://raumzeit~       83 SpaceX      
-## 3 RZ082 Bo~ 2019-12-20 00:00:00      127 https://raumzeit~       82 Bodenerkund~
-## 4 Raumzeit~ 2019-12-05 00:00:00        8 https://raumzeit~       NA Raumzeit 20~
-## 5 RZ081 Hu~ 2019-11-29 00:00:00      104 https://raumzeit~       81 Hubble-Welt~
-## 6 RZ080 Eu~ 2019-11-07 00:00:00       88 https://raumzeit~       80 Europäische~</code></pre>
+## 1 RZ085 Er~ 2020-03-08 00:00:00      115 https://raumzeit~       85 Erforschung~
+## 2 RZ084 Be~ 2020-02-07 00:00:00      123 https://raumzeit~       84 Besuch beim~
+## 3 RZ083 Sp~ 2020-01-17 00:00:00      164 https://raumzeit~       83 SpaceX      
+## 4 RZ082 Bo~ 2019-12-20 00:00:00      127 https://raumzeit~       82 Bodenerkund~
+## 5 Raumzeit~ 2019-12-05 00:00:00        8 https://raumzeit~       NA Raumzeit 20~
+## 6 RZ081 Hu~ 2019-11-29 00:00:00      104 https://raumzeit~       81 Hubble-Welt~</code></pre>
 <pre class="r"><code>replies &lt;- map_dfr(folgenuebersicht$item_link,function(x){
-  vcard &lt;- x %&gt;%
+  comment &lt;- x %&gt;%
     read_html() %&gt;%
-    html_nodes(&quot;.comment-author.vcard&quot;) %&gt;%
+    html_nodes(&quot;.comment&quot;) %&gt;%
     html_text() %&gt;%
     str_remove_all(&quot;\t|\n&quot;) 
-
+  vcard &lt;- map_chr(comment,~str_split_fixed(.x,&quot;\\s:&quot;,2)[1])
+  comment_text &lt;- map_chr(comment,~str_split_fixed(.x,&quot;\\s:&quot;,2)[2])
+  
   who &lt;- str_match(vcard,&quot;(.+)\\ssagte&quot;)[,2]
   datum &lt;- str_match(vcard,&quot;\\sam\\s(\\d+\\.\\s\\w+\\s\\d{4})\\sum&quot;)[,2]
-  zeit &lt;- str_match(vcard,&quot;\\sum\\s(\\d+:\\d+)\\s&quot;)[,2]
-  
+  zeit &lt;- str_match(vcard,&quot;\\sum\\s(\\d+:\\d+)&quot;)[,2]
+
   datumzeit &lt;- as.character(as.POSIXct(paste(datum,zeit),format = &quot;%d. %B %Y %H:%M&quot;))
-  tibble(item_link = x, reply_author = who, reply_date = datumzeit)
+  tibble(item_link = x, reply_author = who, reply_date = datumzeit, comment = comment_text)
 }) %&gt;%
   mutate(reply_date = as.POSIXct(reply_date))</code></pre>
 <pre class="r"><code>head(replies)
-## # A tibble: 6 x 3
-##   item_link                                     reply_author reply_date         
-##   &lt;chr&gt;                                         &lt;chr&gt;        &lt;dttm&gt;             
-## 1 https://raumzeit-podcast.de/2020/02/07/rz084~ Bende        2020-02-08 12:02:00
-## 2 https://raumzeit-podcast.de/2020/02/07/rz084~ SwingBy      2020-02-08 14:49:00
-## 3 https://raumzeit-podcast.de/2020/02/07/rz084~ SwingBy      2020-02-08 14:50:00
-## 4 https://raumzeit-podcast.de/2020/02/07/rz084~ Glanzmispel  2020-02-08 15:29:00
-## 5 https://raumzeit-podcast.de/2020/01/17/rz083~ Martin       2020-01-17 17:08:00
-## 6 https://raumzeit-podcast.de/2020/01/17/rz083~ Martin       2020-01-21 13:38:00</code></pre>
+## # A tibble: 6 x 4
+##   item_link              reply_author reply_date          comment               
+##   &lt;chr&gt;                  &lt;chr&gt;        &lt;dttm&gt;              &lt;chr&gt;                 
+## 1 https://raumzeit-podc~ Manuel       2020-03-10 01:49:00 &lt;U+2665&gt;&lt;U+FE0F&gt;Kommentiere &lt;U+2193&gt;        
+## 2 https://raumzeit-podc~ Manuel       2020-03-10 01:49:00 &lt;U+2665&gt;&lt;U+FE0F&gt;Kommentiere &lt;U+2193&gt;        
+## 3 https://raumzeit-podc~ Jo           2020-03-11 07:11:00 Super interessant wie~
+## 4 https://raumzeit-podc~ Jo           2020-03-11 07:11:00 Super interessant wie~
+## 5 https://raumzeit-podc~ Bende        2020-02-08 12:02:00 Sehr cooles und spann~
+## 6 https://raumzeit-podc~ Bende        2020-02-08 12:02:00 Sehr cooles und spann~</code></pre>
 </div>
 <div id="website-replies-1" class="section level3">
 <h3>Website replies</h3>
 <p>I was expecting some podcasts to have a high listener interaction and much discussion over time while others probabbly provoked little or no listener interaction. Old episodes have had a longer time period for such interaction, and so i wanted to visualize the intensity of the interaction (i.e. replies) in such a way, that this aspect becomes apparent.</p>
-<pre><code>## Warning: Removed 11 rows containing missing values (geom_path).
-## Warning: Removed 11 rows containing missing values (geom_point).
+<pre><code>## Warning: Removed 22 row(s) containing missing values (geom_path).
+## Warning: Removed 22 rows containing missing values (geom_point).
 
-## Warning: Removed 11 rows containing missing values (geom_point).</code></pre>
+## Warning: Removed 22 rows containing missing values (geom_point).</code></pre>
 <p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
 <pre class="r"><code>folgen_replies_smry &lt;- folgen_replies %&gt;%
   group_by_at(1:6) %&gt;%
@@ -131,8 +133,36 @@ folgen_replies_smry %&gt;%
   geom_point(data = folgen_replies_smry_filter, colour = &quot;red&quot;) +
   geom_label_repel(data = folgen_replies_smry_filter,min.segment.length = 0) +
   geom_smooth(method = &quot;loess&quot;,se = FALSE) +
-  labs(y = &quot;# Replies&quot;,x = &quot;Release Date&quot;)</code></pre>
+  labs(y = &quot;# Replies&quot;,x = &quot;Release Date&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
 <p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+<pre class="r"><code>library(tidytext)
+## Warning: Paket &#39;tidytext&#39; wurde unter R Version 3.6.1 erstellt
+folgen_replies_unnest &lt;- folgen_replies %&gt;%
+  unnest_tokens(word,comment)
+
+stopwords &lt;- tidytext::get_stopwords(&quot;de&quot;)
+
+folgen_replies_unnest &lt;- folgen_replies_unnest %&gt;%
+  anti_join(stopwords, by = &quot;word&quot;)
+
+
+folgen_replies_unnest %&gt;%
+  count(word,sort = TRUE) 
+## # A tibble: 13,249 x 2
+##    word            n
+##    &lt;chr&gt;       &lt;int&gt;
+##  1 kommentiere  1522
+##  2 dass          947
+##  3 folge         797
+##  4 podcast       744
+##  5 mal           679
+##  6 schon         659
+##  7 tim           608
+##  8 ja            592
+##  9 sagte         517
+## 10 raumzeit      473
+## # ... with 13,239 more rows</code></pre>
 </div>
 <div id="twitter-data" class="section level3">
 <h3>Twitter Data</h3>
@@ -152,13 +182,20 @@ folgen_replies_smry %&gt;%
 ## 4 2020-02-07 10:20:36 Und es geht~             41            14 &lt;chr [1]&gt;       
 ## 5 2020-02-04 11:39:18 @MaikMoring~              2             0 &lt;chr [1]&gt;       
 ## 6 2020-01-24 19:55:44 @astroidex ~              1             0 &lt;chr [1]&gt;</code></pre>
-<p>I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix “RZ” to refer to an episode, regrettably, he is not completely concise in this. Non the less, let’s see how many</p>
+<p>I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix “RZ” to refer to an episode, regrettably, he is not completely concise in this. Non the less, let’s see how many episodes we can matchi in this way.</p>
 <pre class="r"><code>raumtweets$rz_folge &lt;- as.integer(str_match(raumtweets$text,&quot;RZ(\\d{1,3})&quot;)[,2])</code></pre>
 <p>We’ve got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the episode. So let’s extract these URLs from the column <code>urls_expanded_url</code>.</p>
 <pre class="r"><code>raumtweets$item_link &lt;- map_chr(raumtweets$urls_expanded_url,function(x){
   out &lt;- x[str_detect(x,&quot;raumzeit-podcast.de/\\d{4}&quot;)]
   ifelse(length(out)&lt;0,NA_character_,out)
   })</code></pre>
+<p>We can see how many tweets we were able to assign with the two methods using <code>table()</code>
+This shows that the first method was more successful than the second method.</p>
+<pre class="r"><code>table(!is.na(raumtweets$rz_folge),!is.na(raumtweets$item_link))
+##        
+##         FALSE TRUE
+##   FALSE   260   25
+##   TRUE     75   47</code></pre>
 <pre class="r"><code>raumtweets_folgen &lt;- raumtweets %&gt;%
   left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,item_link), by = &quot;item_link&quot;) %&gt;%
   left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,rz_folge), by = &quot;rz_folge&quot;) %&gt;%
@@ -177,8 +214,9 @@ raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,retweet_count&gt;30)</co
   geom_point(data = raumtweets_folgen_filter,colour = &quot;red&quot;) +
   geom_smooth(method = &quot;loess&quot;,se = FALSE) +
   geom_label_repel(data = raumtweets_folgen_filter,nudge_x = 5,nudge_y = 5) +
-  labs(x = &quot;Tweet Date&quot;, y = &quot;Retweet Count&quot;)</code></pre>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
+  labs(x = &quot;Tweet Date&quot;, y = &quot;Retweet Count&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
 <pre class="r"><code>
 raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,favorite_count&gt;70)
 ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
@@ -186,7 +224,8 @@ ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
   geom_point(data = raumtweets_folgen_filter, colour = &quot;red&quot;) +
   geom_smooth(method = &quot;loess&quot;,se = FALSE)  +
   geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
-  labs(x = &quot;Tweet Date&quot;, y = &quot;Favourites Count&quot;)</code></pre>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-26-2.png" width="672" /></p>
+  labs(x = &quot;Tweet Date&quot;, y = &quot;Favourites Count&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-28-2.png" width="672" /></p>
 </div>
 </div>

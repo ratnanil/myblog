@@ -8,6 +8,7 @@ tags: ["GIS", "sf","benchmarking","R"]
 
 
 
+<p>I had recently needed to filter some 30k Points based on whether they were within a certain polygon or not. It looked something like this:</p>
 <pre class="r"><code>library(sf)
 library(tidyverse)
 library(microbenchmark)
@@ -17,21 +18,46 @@ points &lt;- st_sample(st_buffer(monte_generoso,1000),1000,what = &quot;centers&
 
 ggplot() + 
   geom_sf(data = points)+
-  geom_sf(data = monte_generoso,fill = &quot;red&quot;,alpha = 0.5) + 
+  geom_sf(data = monte_generoso,fill = &quot;red&quot;,alpha = 0.3) + 
   theme_void()</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>My first approach was to use <code>st_within()</code> from my favourite <code>R</code> package <code>sf</code>, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. “<em>Is the point <em>within</em> the polygon?</em>” can also be rephrased to “<em>Does the polygon <em>contain</em> this point?</em>” (using <code>st_contains</code>) and in my case, <code>instersect</code> does the job as well. In each case, the filtering is done slightly differently but the results are, least in my case, identical (I would have to consult <a href="https://en.wikipedia.org/wiki/DE-9IM">DE-9IM</a> to check if there are slight differences, but in my case this this is not crucial).</p>
+<pre class="r"><code>points_filter1 &lt;- points[st_within(points,monte_generoso,sparse = FALSE)[,1]]
+plot(monte_generoso); plot(points_filter1, add = TRUE)</code></pre>
+<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<pre class="r"><code>points_filter2 &lt;- points[st_contains(monte_generoso,points,sparse = FALSE)[1,]]
+plot(monte_generoso); plot(points_filter2, add = TRUE)</code></pre>
+<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-2-2.png" width="672" /></p>
+<pre class="r"><code>points_filter3 &lt;- points[st_intersects(points,monte_generoso,sparse = FALSE)[,1]]
+plot(monte_generoso); plot(points_filter3, add = TRUE)</code></pre>
+<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-2-3.png" width="672" /></p>
+<pre class="r"><code>identical(points_filter1,points_filter2)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>identical(points_filter1,points_filter3)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p>I was amazed to find that <code>st_within</code> was much faster than <code>st_contains</code> and so I decided to benchmark the three functions with <code>microbenchmark</code>. Since it doesn’t always take the same amount of time to process a function, it makes sence to run each function multiple times. In my case, I called each of the three functions 100 times.</p>
 <pre class="r"><code>mbm  &lt;- microbenchmark(
   intersects = st_intersects(monte_generoso,points),
   within = st_within(points,monte_generoso),
   contains = st_contains(monte_generoso,points),
   times = 100
-)</code></pre>
-<pre class="r"><code>autoplot(mbm)</code></pre>
-<pre><code>## Coordinate system already present. Adding new coordinate system, which will replace the existing one.</code></pre>
+)
+
+mbm$time &lt;- microbenchmark:::convert_to_unit(mbm$time,&quot;t&quot;)
+
+ggplot(mbm, aes(expr,time,fill = expr)) +
+  ggplot2::geom_violin() +
+  coord_flip() +
+  theme_minimal() +
+  # expand_limits(y = 0) +
+  labs(x = &quot;Function&quot;,y = paste0(&quot;Duration (in &quot;,attr(mbm$time,&quot;unit&quot;),&quot;)&quot;)) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
-<pre class="r"><code>ou &lt;- map_dfr(c(10,100,500,1000,5000,10000),function(x){
+<pre class="r"><code># this could have also been done with autoplot(), but I don&#39;t like automated plottnig functions.</code></pre>
+<p>What we can see in the plot above, is that <code>st_within</code> sometimes took nearly 50ms, but usually around 18ms. This is still slower than both <code>st_contains</code> (around 11ms) and <code>st_within</code> (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I’ll test this by raising the number of points in <code>point</code>.</p>
+<pre class="r"><code>mbm2 &lt;- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
   
-  points &lt;- st_sample(st_buffer(monte_generoso,1000),x,what = &quot;centers&quot;)
+  points &lt;- st_sample(st_buffer(monte_generoso,1000),n_points,what = &quot;centers&quot;)
 
   mbm  &lt;- microbenchmark(
   intersects = st_intersects(monte_generoso,points),
@@ -40,20 +66,95 @@ ggplot() +
   times = 10
   )
   as.data.frame(mbm) %&gt;%
-    mutate(n = x)
-})
+    mutate(n = n_points)
+})</code></pre>
+<p>Since I now have a new dimension in my data (number of points) dont want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a linerange indicating the 1. and 3. Quartiles.</p>
+<pre class="r"><code>mbm2$time &lt;- microbenchmark:::convert_to_unit(mbm2$time,&quot;t&quot;)
 
-ou %&gt;%
-  mutate(time = time/1e9) %&gt;%
+mbm2 %&gt;%
   group_by(expr,n) %&gt;%
   summarise(
-    mean = mean(time),
+    median = median(time),
     q25 = quantile(time,0.25),
     q75 = quantile(time,0.75)
   ) %&gt;%
-ggplot(aes(n,mean, colour = expr)) +
+ggplot(aes(n,median, colour = expr)) +
   geom_line() +
   geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = &quot;# data points&quot;,y = &quot;Duration (seconds)&quot;, colour = &quot;Binary Predicate Operation&quot;) +
-  theme(legend.position = &quot;bottom&quot;)</code></pre>
-<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+  labs(x = &quot;# data points&quot;,y = paste0(&quot;Duration (in &quot;,attr(mbm2$time,&quot;unit&quot;),&quot;)&quot;), colour = &quot;Binary Predicate Operation&quot;) +
+  theme_minimal() +
+  theme(legend.position = &quot;bottom&quot;) </code></pre>
+<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>It’s still the case that <code>st_within</code> is slower by along run, and additionally seems to scale nonlinearly. I’m giving <code>st_within</code> one more chance to pull itself together and prove it’s worth by raising the number of <em>circles</em> (polygons) that I’m querying with:</p>
+<pre class="r"><code>mbm3 &lt;- map_dfr(c(1,5,20,100,500),function(n_circles){
+  
+  points &lt;- st_sample(st_buffer(monte_generoso,1000),1000,what = &quot;centers&quot;)
+  circles &lt;-   st_sample(st_buffer(monte_generoso,1000),n_circles,what = &quot;centers&quot;) %&gt;%
+    st_buffer(500)
+
+  mbm  &lt;- microbenchmark(
+  intersects = st_intersects(monte_generoso,points),
+  within = st_within(points,monte_generoso),
+  contains = st_contains(monte_generoso,points),
+  times = 10
+  )
+  as.data.frame(mbm) %&gt;%
+    mutate(n = n_circles)
+})
+
+mbm3$time &lt;- microbenchmark:::convert_to_unit(mbm3$time,&quot;t&quot;)
+
+
+mbm3 %&gt;%
+  group_by(expr,n) %&gt;%
+  summarise(
+    median = median(time),
+    q25 = quantile(time,0.25),
+    q75 = quantile(time,0.75)
+  ) %&gt;%
+ggplot(aes(n,median, colour = expr)) +
+  geom_line() +
+  geom_pointrange(aes(ymin = q25,ymax = q75)) +
+  labs(x = &quot;# data circles&quot;,y = paste0(&quot;Duration (in &quot;,attr(mbm3$time,&quot;unit&quot;),&quot;)&quot;), colour = &quot;Binary Predicate Operation&quot;) +
+  theme_minimal() +
+  theme(legend.position = &quot;bottom&quot;) </code></pre>
+<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>Nope.. still too slow by a long way.</p>
+<p>[<a href="https://media1.giphy.com/media/bMdZu3fG2ZEBO/giphy.gif" class="uri">https://media1.giphy.com/media/bMdZu3fG2ZEBO/giphy.gif</a>]</p>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>## R version 3.6.0 (2019-04-26)
+## Platform: x86_64-w64-mingw32/x64 (64-bit)
+## Running under: Windows 10 x64 (build 18363)
+## 
+## Matrix products: default
+## 
+## locale:
+## [1] LC_COLLATE=German_Switzerland.1252  LC_CTYPE=German_Switzerland.1252   
+## [3] LC_MONETARY=German_Switzerland.1252 LC_NUMERIC=C                       
+## [5] LC_TIME=German_Switzerland.1252    
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] microbenchmark_1.4-7 forcats_0.4.0        stringr_1.4.0       
+##  [4] dplyr_0.8.3          purrr_0.3.3          readr_1.3.1         
+##  [7] tidyr_1.0.2          tibble_2.1.3         ggplot2_3.3.0       
+## [10] tidyverse_1.3.0      sf_0.9-0            
+## 
+## loaded via a namespace (and not attached):
+##  [1] tidyselect_0.2.5   xfun_0.12          haven_2.2.0        lattice_0.20-38   
+##  [5] colorspace_1.4-1   generics_0.0.2     vctrs_0.2.4        htmltools_0.3.6   
+##  [9] yaml_2.2.0         rlang_0.4.5        e1071_1.7-2        pillar_1.4.2      
+## [13] withr_2.1.2        glue_1.3.1         DBI_1.0.0          dbplyr_1.4.2      
+## [17] readxl_1.3.1       modelr_0.1.5       lifecycle_0.1.0    cellranger_1.1.0  
+## [21] munsell_0.5.0      blogdown_0.17.1    gtable_0.3.0       rvest_0.3.5       
+## [25] evaluate_0.14      labeling_0.3       knitr_1.28         class_7.3-15      
+## [29] broom_0.5.2        Rcpp_1.0.2         KernSmooth_2.23-15 backports_1.1.4   
+## [33] scales_1.0.0       classInt_0.4-1     jsonlite_1.6       fs_1.3.1          
+## [37] hms_0.5.3          digest_0.6.20      stringi_1.4.3      bookdown_0.14     
+## [41] grid_3.6.0         cli_1.1.0          tools_3.6.0        magrittr_1.5      
+## [45] crayon_1.3.4       pkgconfig_2.0.2    xml2_1.2.4         reprex_0.3.0      
+## [49] lubridate_1.7.4    rstudioapi_0.10    assertthat_0.2.1   rmarkdown_2.1     
+## [53] httr_1.4.1         R6_2.4.0           units_0.6-3        nlme_3.1-141      
+## [57] compiler_3.6.0</code></pre>

@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-
+I had recently needed to filter some 30k Points based on whether they were within a certain polygon or not. It looked something like this:
 ```{r, warning=FALSE,message=FALSE}
 
 library(sf)
@@ -23,10 +23,30 @@ points <- st_sample(st_buffer(monte_generoso,1000),1000,what = "centers")
 
 ggplot() + 
   geom_sf(data = points)+
-  geom_sf(data = monte_generoso,fill = "red",alpha = 0.5) + 
+  geom_sf(data = monte_generoso,fill = "red",alpha = 0.3) + 
   theme_void()
 
+
 ```
+
+My first approach was to use `st_within()` from my favourite `R` package `sf`, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. "_Is the point *within* the polygon?_" can also be rephrased to "_Does the polygon *contain* this point?_" (using `st_contains`) and in my case, `instersect` does the job as well. In each case, the filtering is done slightly differently but the results are, least in my case, identical (I would have to consult [DE-9IM](https://en.wikipedia.org/wiki/DE-9IM) to check if there are slight differences, but in my case this this is not crucial). 
+
+
+```{r}
+points_filter1 <- points[st_within(points,monte_generoso,sparse = FALSE)[,1]]
+plot(monte_generoso); plot(points_filter1, add = TRUE)
+
+points_filter2 <- points[st_contains(monte_generoso,points,sparse = FALSE)[1,]]
+plot(monte_generoso); plot(points_filter2, add = TRUE)
+
+points_filter3 <- points[st_intersects(points,monte_generoso,sparse = FALSE)[,1]]
+plot(monte_generoso); plot(points_filter3, add = TRUE)
+
+identical(points_filter1,points_filter2)
+identical(points_filter1,points_filter3)
+```
+
+I was amazed to find that `st_within` was much faster than `st_contains` and so I decided to benchmark the three functions with `microbenchmark`. Since it doesn't always take the same amount of time to process a function, it makes sence to run each function multiple times. In my case, I called each of the three functions 100 times.
 
 
 ```{r}
@@ -37,18 +57,27 @@ mbm  <- microbenchmark(
   times = 100
 )
 
+mbm$time <- microbenchmark:::convert_to_unit(mbm$time,"t")
+
+ggplot(mbm, aes(expr,time,fill = expr)) +
+  ggplot2::geom_violin() +
+  coord_flip() +
+  theme_minimal() +
+  # expand_limits(y = 0) +
+  labs(x = "Function",y = paste0("Duration (in ",attr(mbm$time,"unit"),")")) +
+  theme(legend.position = "none")
+
+# this could have also been done with autoplot(), but I don't like automated plottnig functions.
+
 ```
 
-```{r}
-autoplot(mbm)
-```
+What we can see in the plot above, is that `st_within` sometimes took nearly 50ms, but usually around 18ms. This is still slower than both `st_contains` (around 11ms) and `st_within` (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I'll test this by raising the number of points in `point`.
 
 
 ```{r}
-
-ou <- map_dfr(c(10,100,500,1000,5000,10000),function(x){
+mbm2 <- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
   
-  points <- st_sample(st_buffer(monte_generoso,1000),x,what = "centers")
+  points <- st_sample(st_buffer(monte_generoso,1000),n_points,what = "centers")
 
   mbm  <- microbenchmark(
   intersects = st_intersects(monte_generoso,points),
@@ -57,22 +86,76 @@ ou <- map_dfr(c(10,100,500,1000,5000,10000),function(x){
   times = 10
   )
   as.data.frame(mbm) %>%
-    mutate(n = x)
+    mutate(n = n_points)
 })
+```
 
-ou %>%
-  mutate(time = time/1e9) %>%
+Since I now have a new dimension in my data (number of points) dont want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a linerange indicating the 1. and 3. Quartiles.
+
+```{r}
+mbm2$time <- microbenchmark:::convert_to_unit(mbm2$time,"t")
+
+mbm2 %>%
   group_by(expr,n) %>%
   summarise(
-    mean = mean(time),
+    median = median(time),
     q25 = quantile(time,0.25),
     q75 = quantile(time,0.75)
   ) %>%
-ggplot(aes(n,mean, colour = expr)) +
+ggplot(aes(n,median, colour = expr)) +
   geom_line() +
   geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = "# data points",y = "Duration (seconds)", colour = "Binary Predicate Operation") +
-  theme(legend.position = "bottom")
+  labs(x = "# data points",y = paste0("Duration (in ",attr(mbm2$time,"unit"),")"), colour = "Binary Predicate Operation") +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+
 ```
 
+It's still the case that `st_within` is slower by  along run, and additionally seems to scale nonlinearly. I'm giving `st_within` one more chance to pull itself together and prove it's worth by raising the number of _circles_ (polygons) that I'm querying with:
+
+```{r}
+
+
+mbm3 <- map_dfr(c(1,5,20,100,500),function(n_circles){
+  
+  points <- st_sample(st_buffer(monte_generoso,1000),1000,what = "centers")
+  circles <-   st_sample(st_buffer(monte_generoso,1000),n_circles,what = "centers") %>%
+    st_buffer(500)
+
+  mbm  <- microbenchmark(
+  intersects = st_intersects(monte_generoso,points),
+  within = st_within(points,monte_generoso),
+  contains = st_contains(monte_generoso,points),
+  times = 10
+  )
+  as.data.frame(mbm) %>%
+    mutate(n = n_circles)
+})
+
+mbm3$time <- microbenchmark:::convert_to_unit(mbm3$time,"t")
+
+
+mbm3 %>%
+  group_by(expr,n) %>%
+  summarise(
+    median = median(time),
+    q25 = quantile(time,0.25),
+    q75 = quantile(time,0.75)
+  ) %>%
+ggplot(aes(n,median, colour = expr)) +
+  geom_line() +
+  geom_pointrange(aes(ymin = q25,ymax = q75)) +
+  labs(x = "# data circles",y = paste0("Duration (in ",attr(mbm3$time,"unit"),")"), colour = "Binary Predicate Operation") +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+
+```
+
+Nope.. still too slow by a long way. 
+
+![https://media1.giphy.com/media/bMdZu3fG2ZEBO/giphy.gif]
+
+```{r}
+sessionInfo()
+```
 
