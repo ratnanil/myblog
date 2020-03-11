@@ -59,6 +59,7 @@ mbm  <- microbenchmark(
 
 mbm$time <- microbenchmark:::convert_to_unit(mbm$time,"t")
 
+# this could have also been done with autoplot(), but I don't like automated plottnig functions.
 ggplot(mbm, aes(expr,time,fill = expr)) +
   ggplot2::geom_violin() +
   coord_flip() +
@@ -67,7 +68,6 @@ ggplot(mbm, aes(expr,time,fill = expr)) +
   labs(x = "Function",y = paste0("Duration (in ",attr(mbm$time,"unit"),")")) +
   theme(legend.position = "none")
 
-# this could have also been done with autoplot(), but I don't like automated plottnig functions.
 
 ```
 
@@ -106,6 +106,7 @@ ggplot(aes(n,median, colour = expr)) +
   geom_line() +
   geom_pointrange(aes(ymin = q25,ymax = q75)) +
   labs(x = "# data points",y = paste0("Duration (in ",attr(mbm2$time,"unit"),")"), colour = "Binary Predicate Operation") +
+  expand_limits(y = 0) +
   theme_minimal() +
   theme(legend.position = "bottom") 
 
@@ -146,14 +147,17 @@ ggplot(aes(n,median, colour = expr)) +
   geom_line() +
   geom_pointrange(aes(ymin = q25,ymax = q75)) +
   labs(x = "# data circles",y = paste0("Duration (in ",attr(mbm3$time,"unit"),")"), colour = "Binary Predicate Operation") +
+  expand_limits(y = 0) +
   theme_minimal() +
   theme(legend.position = "bottom") 
 
 ```
 
-Nope.. still too slow by a long way. 
+Nope.. still too slow by a long way. Unexpected for me however, is the fact that the number of polygons does not slow the process. Take home message: use `st_contains` when you can.
 
-![https://media1.giphy.com/media/bMdZu3fG2ZEBO/giphy.gif]
+![too slow](too_slow.gif)
+
+
 
 ```{r}
 sessionInfo()
