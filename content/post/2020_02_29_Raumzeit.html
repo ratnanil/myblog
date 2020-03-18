@@ -163,6 +163,86 @@ folgen_replies_unnest %&gt;%
 ##  9 sagte         517
 ## 10 raumzeit      473
 ## # ... with 13,239 more rows</code></pre>
+<pre class="r"><code>
+sent &lt;- c(
+  # positive Wörter
+  readLines(&quot;SentiWS_v2.0/SentiWS_v2.0_Positive.txt&quot;,
+            encoding = &quot;UTF-8&quot;),
+  # negative Wörter
+  readLines(&quot;SentiWS_v2.0/SentiWS_v2.0_Negative.txt&quot;,
+            encoding = &quot;UTF-8&quot;)
+) %&gt;% lapply(function(x) {
+  # Extrahieren der einzelnen Spalten
+  res &lt;- strsplit(x, &quot;\t&quot;, fixed = TRUE)[[1]]
+  return(data.frame(words = res[1], value = res[2],
+                    stringsAsFactors = FALSE))
+}) %&gt;%
+  bind_rows %&gt;% 
+  mutate(words = gsub(&quot;\\|.*&quot;, &quot;&quot;, words) %&gt;% tolower,
+         value = as.numeric(value)) %&gt;% 
+  # manche Wörter kommen doppelt vor, hier nehmen wir den mittleren Wert
+  group_by(words) %&gt;% summarise(value = mean(value)) %&gt;% ungroup
+
+
+
+folgen_replies_unnest &lt;- inner_join(folgen_replies_unnest,sent,by = c(&quot;word&quot; = &quot;words&quot;))
+
+folgen_reply_sent &lt;- folgen_replies_unnest %&gt;%
+  group_by_at(1:7) %&gt;%
+  summarise(value = mean(value)) %&gt;%
+  group_by_at(1:6) %&gt;%
+  summarise(
+    median = median(value),
+    q25 = quantile(value,0.25),
+    q75 = quantile(value,0.75),
+    n = n(),
+  ) 
+ggplot(folgen_reply_sent, aes(n,median,ymin = q25,ymax = q75, colour = factor(rz_folge))) +
+  # geom_point() +,
+  geom_pointrange() +
+  geom_hline(yintercept = 0) +
+  labs(x = &quot;Number of replies&quot;,y = &quot;Mean sentiment&quot;) +
+  lims(y = c(-1,1)) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-20-1.png" width="672" /></p>
+<pre class="r"><code>
+folgen_reply_sent_fil &lt;- folgen_reply_sent %&gt;%
+  filter(median &gt; 0.3 | median&lt; -0.1)
+
+folgen_reply_sent %&gt;%
+  ggplot(aes(factor(rz_folge),median,label = title_clean)) +
+  geom_point() +
+  # geom_label_repel(data = folgen_reply_sent_fil,nudge_y = folgen_reply_sent_fil$value) +
+  scale_y_continuous(limits = c(-1,1)) +
+  labs(x = &quot;Raumzeit-Folge&quot;,y = &quot;Mittleres &#39;sentiment&#39;&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-20-2.png" width="672" /></p>
+<pre class="r"><code>
+
+folgen_replies_unnest %&gt;%
+  group_by(word,value) %&gt;%
+  count() %&gt;%
+  arrange(desc(value))
+## # A tibble: 727 x 3
+## # Groups:   word, value [727]
+##    word              value     n
+##    &lt;chr&gt;             &lt;dbl&gt; &lt;int&gt;
+##  1 gelungen          1        10
+##  2 perfekt           0.730    12
+##  3 lob               0.725    16
+##  4 wunderbar         0.723    16
+##  5 spannend          0.716   118
+##  6 freude            0.650    22
+##  7 mut               0.609     2
+##  8 freundlich        0.602     2
+##  9 hervorragend      0.589    21
+## 10 abwechslungsreich 0.580     2
+## # ... with 717 more rows
+
+folgen_replies_unnest %&gt;%
+  filter(title_clean == &quot;Mars Express&quot;) %&gt;%
+  pull(word)
+## [1] &quot;gelungen&quot; &quot;spannend&quot; &quot;gelungen&quot; &quot;spannend&quot; &quot;sprung&quot;   &quot;sprung&quot;   &quot;super&quot;   
+## [8] &quot;super&quot;</code></pre>
 </div>
 <div id="twitter-data" class="section level3">
 <h3>Twitter Data</h3>
@@ -216,7 +296,7 @@ raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,retweet_count&gt;30)</co
   geom_label_repel(data = raumtweets_folgen_filter,nudge_x = 5,nudge_y = 5) +
   labs(x = &quot;Tweet Date&quot;, y = &quot;Retweet Count&quot;)
 ## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-29-1.png" width="672" /></p>
 <pre class="r"><code>
 raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,favorite_count&gt;70)
 ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
@@ -226,6 +306,6 @@ ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
   geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
   labs(x = &quot;Tweet Date&quot;, y = &quot;Favourites Count&quot;)
 ## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
-<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-28-2.png" width="672" /></p>
+<p><img src="/post/2020_02_29_Raumzeit_files/figure-html/unnamed-chunk-29-2.png" width="672" /></p>
 </div>
 </div>

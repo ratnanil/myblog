@@ -288,6 +288,72 @@ folgen_replies_unnest %>%
 ```
 
 
+```{r}
+
+sent <- c(
+  # positive Wörter
+  readLines("SentiWS_v2.0/SentiWS_v2.0_Positive.txt",
+            encoding = "UTF-8"),
+  # negative Wörter
+  readLines("SentiWS_v2.0/SentiWS_v2.0_Negative.txt",
+            encoding = "UTF-8")
+) %>% lapply(function(x) {
+  # Extrahieren der einzelnen Spalten
+  res <- strsplit(x, "\t", fixed = TRUE)[[1]]
+  return(data.frame(words = res[1], value = res[2],
+                    stringsAsFactors = FALSE))
+}) %>%
+  bind_rows %>% 
+  mutate(words = gsub("\\|.*", "", words) %>% tolower,
+         value = as.numeric(value)) %>% 
+  # manche Wörter kommen doppelt vor, hier nehmen wir den mittleren Wert
+  group_by(words) %>% summarise(value = mean(value)) %>% ungroup
+
+
+
+folgen_replies_unnest <- inner_join(folgen_replies_unnest,sent,by = c("word" = "words"))
+
+folgen_reply_sent <- folgen_replies_unnest %>%
+  group_by_at(1:7) %>%
+  summarise(value = mean(value)) %>%
+  group_by_at(1:6) %>%
+  summarise(
+    median = median(value),
+    q25 = quantile(value,0.25),
+    q75 = quantile(value,0.75),
+    n = n(),
+  ) 
+ggplot(folgen_reply_sent, aes(n,median,ymin = q25,ymax = q75, colour = factor(rz_folge))) +
+  # geom_point() +,
+  geom_pointrange() +
+  geom_hline(yintercept = 0) +
+  labs(x = "Number of replies",y = "Mean sentiment") +
+  lims(y = c(-1,1)) +
+  theme(legend.position = "none")
+
+folgen_reply_sent_fil <- folgen_reply_sent %>%
+  filter(median > 0.3 | median< -0.1)
+
+folgen_reply_sent %>%
+  ggplot(aes(factor(rz_folge),median,label = title_clean)) +
+  geom_point() +
+  # geom_label_repel(data = folgen_reply_sent_fil,nudge_y = folgen_reply_sent_fil$value) +
+  scale_y_continuous(limits = c(-1,1)) +
+  labs(x = "Raumzeit-Folge",y = "Mittleres 'sentiment'")
+
+
+folgen_replies_unnest %>%
+  group_by(word,value) %>%
+  count() %>%
+  arrange(desc(value))
+
+folgen_replies_unnest %>%
+  filter(title_clean == "Mars Express") %>%
+  pull(word)
+
+```
+
+
 ### Twitter Data
 
 ```{r, eval = FALSE, warning=FALSE}
