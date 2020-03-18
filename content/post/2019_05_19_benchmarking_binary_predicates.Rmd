@@ -60,10 +60,10 @@ mbm  <- microbenchmark(
   times = 100
 )
 
+mbm$time <- microbenchmark:::convert_to_unit(mbm$time,"t")
 
 mbm <- mbm %>%
   mutate(
-    mbm$time <- microbenchmark:::convert_to_unit(mbm$time,"t"),
     expr = fct_reorder(expr,time,median,.desc = TRUE)
   )
 
@@ -99,7 +99,9 @@ mbm2 <- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
 Since I now have a new dimension in my data (number of points) don't want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a line range indicating the 1. and 3. Quartiles.
 
 ```{r}
+
 mbm2$time <- microbenchmark:::convert_to_unit(mbm2$time,"t")
+
 
 mbm2 %>%
   group_by(expr,n) %>%

@@ -46,10 +46,10 @@ ggplot()  + geom_sf(data = monte_generoso)+ geom_sf(data = points_filter1) + the
   times = 100
 )
 
+mbm$time &lt;- microbenchmark:::convert_to_unit(mbm$time,&quot;t&quot;)
 
 mbm &lt;- mbm %&gt;%
   mutate(
-    mbm$time &lt;- microbenchmark:::convert_to_unit(mbm$time,&quot;t&quot;),
     expr = fct_reorder(expr,time,median,.desc = TRUE)
   )
 
@@ -60,7 +60,7 @@ ggplot(mbm, aes(time,expr,fill = ..x..)) +
   labs(y = &quot;Function&quot;,x = paste0(&quot;Duration (in &quot;,attr(mbm$time,&quot;unit&quot;),&quot;)&quot;)) +
   theme(legend.position=&quot;none&quot;) +
   theme_minimal()</code></pre>
-<pre><code>## Picking joint bandwidth of 338000</code></pre>
+<pre><code>## Picking joint bandwidth of 0.385</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
 <p>What we can see in the plot above, is that <code>st_within</code> sometimes took nearly 50ms, but usually around 18ms. This is still slower than both <code>st_contains</code> (around 11ms) and <code>st_within</code> (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I’ll test this by raising the number of points in <code>point</code>.</p>
 <pre class="r"><code>mbm2 &lt;- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
@@ -79,6 +79,7 @@ ggplot(mbm, aes(time,expr,fill = ..x..)) +
 })</code></pre>
 <p>Since I now have a new dimension in my data (number of points) don’t want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a line range indicating the 1. and 3. Quartiles.</p>
 <pre class="r"><code>mbm2$time &lt;- microbenchmark:::convert_to_unit(mbm2$time,&quot;t&quot;)
+
 
 mbm2 %&gt;%
   group_by(expr,n) %&gt;%
