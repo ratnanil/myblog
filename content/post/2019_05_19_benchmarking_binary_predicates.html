@@ -60,7 +60,7 @@ ggplot(mbm, aes(time,expr,fill = ..x..)) +
   labs(y = &quot;Function&quot;,x = paste0(&quot;Duration (in &quot;,attr(mbm$time,&quot;unit&quot;),&quot;)&quot;)) +
   theme(legend.position=&quot;none&quot;) +
   theme_minimal()</code></pre>
-<pre><code>## Picking joint bandwidth of 0.385</code></pre>
+<pre><code>## Picking joint bandwidth of 0.61</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
 <p>What we can see in the plot above, is that <code>st_within</code> sometimes took nearly 50ms, but usually around 18ms. This is still slower than both <code>st_contains</code> (around 11ms) and <code>st_within</code> (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I’ll test this by raising the number of points in <code>point</code>.</p>
 <pre class="r"><code>mbm2 &lt;- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
@@ -133,7 +133,7 @@ ggplot(aes(n,median, colour = expr)) +
   theme(legend.position = &quot;bottom&quot;) </code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
 <p>Nope.. still too slow by a long way. Unexpected for me however, is the fact that the number of polygons does not slow the process. Take home message: use <code>st_contains</code> when you can.</p>
-<p>!][(<a href="https://i.makeagif.com/media/6-06-2018/BOq_ui.gif" class="uri">https://i.makeagif.com/media/6-06-2018/BOq_ui.gif</a>)</p>
+<p>[][(<a href="https://i.makeagif.com/media/6-06-2018/BOq_ui.gif" class="uri">https://i.makeagif.com/media/6-06-2018/BOq_ui.gif</a>)</p>
 <pre class="r"><code>sessionInfo()</code></pre>
 <pre><code>## R version 3.6.0 (2019-04-26)
 ## Platform: x86_64-w64-mingw32/x64 (64-bit)

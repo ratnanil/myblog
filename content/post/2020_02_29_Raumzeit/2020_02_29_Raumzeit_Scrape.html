@@ -1,0 +1,121 @@
+---
+title: "Scraping a podcast's Metadata"
+author: "Nils Ratnaweera"
+date: "2020-02-29T22:00:00+01:00"
+categories: ["R"]
+tags: ["webscraping","podcast","R"]
+---
+
+
+
+<p>I’ve been listening to the German astronomy podcast <a href="http://raumzeit-podcast.de">“Raumzeit”</a> for quite a while now, and I had the idea to visualize some metrics of the podcast using R. I was interested to know what data I can acquire from the podcast and what I could do within it.</p>
+<p>I started out using the podcast’s RSS feed with the library <code>tidyRSS</code>, but realized that not all episodes were <em>in</em> that feed. I therefore decided to scrape the podcast’s website instead. I also used <code>rtweet</code> to gather some metrics about the podcast using the tweets by the podcast’s host Tim Pritlove, for which he uses the handle @raumzeit. I won’t show all code in this post, but you can get the whole Rmd file on my github page.</p>
+<p>I use the following packages for this analysis, and set the ggplot default theme to <code>theme_classic</code>:</p>
+<pre class="r"><code>library(tidyverse)
+library(lubridate)
+library(rvest)
+library(rtweet)</code></pre>
+<div id="scraping-the-site" class="section level2">
+<h2>Scraping the site</h2>
+<p>Using chrome’s element inspector, I retrieved the css class names of the objects that I wanted to extract from the site, as in the following example.</p>
+<pre class="r"><code>class_show &lt;- read_html(&quot;https://raumzeit-podcast.de/archiv/&quot;) %&gt;%
+  html_nodes(&quot;.show&quot;)
+
+titles &lt;- class_show %&gt;%
+  html_nodes(&quot;.show__title&quot;) %&gt;%
+  html_text() %&gt;%
+  str_trim(&quot;both&quot;)</code></pre>
+<pre class="r"><code>dates &lt;- class_show %&gt;%
+  html_nodes(&quot;.show__meta-data.show__meta-data--date&quot;) %&gt;%
+  html_text() %&gt;%
+  str_trim(&quot;both&quot;) %&gt;%
+  as.POSIXct(format = &quot;%d.%m.%Y&quot;)
+
+dur &lt;- class_show %&gt;%
+  html_nodes(&quot;.show__meta-data.show__meta-data--duration&quot;) %&gt;%
+  html_text() %&gt;%
+  str_trim(&quot;both&quot;) %&gt;%
+  str_remove_all(&quot;\t|\n&quot;)
+
+
+hours &lt;- as.integer(str_match(dur,&quot;(\\d) Stunde&quot;)[,2])
+minutes &lt;- as.integer(str_match(dur,&quot;(\\d+) Minute&quot;)[,2])
+durations &lt;- map2_dbl(hours,minutes,~sum(.x*60,.y,na.rm = TRUE))
+
+
+item_link &lt;- class_show %&gt;% 
+  html_nodes(&quot;.show__title__link&quot;) %&gt;%
+  html_attr(&quot;href&quot;)</code></pre>
+<p>Once I had all the data together, I gathered them in a <code>tibble</code> and started my analysis.</p>
+<pre class="r"><code>folgenuebersicht &lt;- tibble(title = titles, date = dates,duration = durations, item_link = item_link) %&gt;%
+  mutate(
+    rz_folge = as.integer(str_match(title,&quot;RZ(\\d{3})\\s&quot;)[,2]),
+    title_clean = str_remove(title,&quot;RZ\\d{3}\\s&quot;)
+  )
+
+write_csv(folgenuebersicht, &quot;folgenuebersicht.csv&quot;)</code></pre>
+</div>
+<div id="listener-interaction" class="section level2">
+<h2>Listener interaction</h2>
+<p>I was interested to know how intense the interaction was in regard to each podcast. I found two metrics with which this can be quantified:</p>
+<ul>
+<li>The replies posted on the <a href="https://raumzeit-podcast.de/">podcat’s website</a></li>
+<li>Twitter metrics (retweets, favourites, replies) of tweets Tim Pritlove posted after the appearance of a podcast with the user handle @raumzeit.</li>
+</ul>
+<div id="website-replies" class="section level3">
+<h3>Website replies</h3>
+<p>Again, using <code>rvest</code> I scraped the website to retrieve the replies for each podcast.</p>
+<pre class="r"><code>replies &lt;- map_dfr(folgenuebersicht$item_link,function(x){
+  comment &lt;- x %&gt;%
+    read_html() %&gt;%
+    html_nodes(&quot;.comment&quot;)
+  
+  vcard &lt;- comment%&gt;% html_nodes(&quot;.comment-author.vcard&quot;) %&gt;% html_text() %&gt;% str_remove_all(&quot;\t|\n&quot;) 
+  comment_text &lt;- comment%&gt;% html_nodes(&quot;.comment-content&quot;) %&gt;% html_text() %&gt;% str_remove_all(&quot;\t|\n&quot;) 
+  
+  who &lt;- str_match(vcard,&quot;(.+)\\ssagte&quot;)[,2]
+  datum &lt;- str_match(vcard,&quot;\\sam\\s(\\d+\\.\\s\\w+\\s\\d{4})\\sum&quot;)[,2]
+  zeit &lt;- str_match(vcard,&quot;\\sum\\s(\\d+:\\d+)&quot;)[,2]
+
+  datumzeit &lt;- as.character(as.POSIXct(paste(datum,zeit),format = &quot;%d. %B %Y %H:%M&quot;))
+  tibble(item_link = x, reply_author = who, reply_date = datumzeit, comment = comment_text)
+}) %&gt;%
+  mutate(reply_date = as.POSIXct(reply_date))
+
+write_csv(replies, &quot;replies.csv&quot;)</code></pre>
+</div>
+<div id="twitter-data" class="section level3">
+<h3>Twitter Data</h3>
+<pre class="r"><code>token &lt;- create_token(
+  app = &quot;my_appname&quot;,
+  consumer_key = &quot;my_key&quot;,
+  consumer_secret = &quot;my_secret_key&quot;)</code></pre>
+<p>I can now get the tweets by @raumzeit using the <code>get_timeline</code> function.</p>
+<pre class="r"><code>raumtweets &lt;- get_timeline(&quot;raumzeit&quot;, n = 3200)</code></pre>
+<pre class="r"><code>raumtweets &lt;- raumtweets %&gt;%
+  filter(!is_retweet) %&gt;%
+  dplyr::select(created_at,text,favorite_count,retweet_count,urls_expanded_url)</code></pre>
+<p>I particularly interested in the tweets regarding a specific podcast episode. Looking through the tweets I see that Tim usually uses the prefix “RZ” to refer to an episode, regrettably, he is not completely concise in this. Non the less, let’s see how many episodes we can matchi in this way.</p>
+<pre class="r"><code>raumtweets$rz_folge &lt;- as.integer(str_match(raumtweets$text,&quot;RZ(\\d{1,3})&quot;)[,2])</code></pre>
+<p>We’ve got 133 assigned tweets and 445 NAs with up to 5 tweets for a single episode. However, there is another way to assign a tweet to an episode: Via the URL linking to the episode. So let’s extract these URLs from the column <code>urls_expanded_url</code>.</p>
+<pre class="r"><code>raumtweets$item_link &lt;- map_chr(raumtweets$urls_expanded_url,function(x){
+  out &lt;- x[str_detect(x,&quot;raumzeit-podcast.de/\\d{4}&quot;)]
+  ifelse(length(out)&lt;0,NA_character_,out)
+  })
+</code></pre>
+<p>We can see how many tweets we were able to assign with the two methods using <code>table()</code>
+This shows that the first method was more successful than the second method.</p>
+<pre class="r"><code>table(!is.na(raumtweets$rz_folge),!is.na(raumtweets$item_link))</code></pre>
+<pre class="r"><code>raumtweets_folgen &lt;- raumtweets %&gt;%
+  left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,item_link), by = &quot;item_link&quot;) %&gt;%
+  left_join(select(filter(folgenuebersicht,!is.na(rz_folge)),title_clean,date,rz_folge), by = &quot;rz_folge&quot;) %&gt;%
+  mutate(
+    title_clean = coalesce(title_clean.x,title_clean.y),
+    date = coalesce(date.x,date.y)
+  ) %&gt;%
+  select(-c(title_clean.x,title_clean.y,date.x,date.y,urls_expanded_url)) %&gt;%
+  filter(!is.na(title_clean))
+
+write_csv(raumtweets_folgen,&quot;raumtweets_folgen.csv&quot;)</code></pre>
+</div>
+</div>

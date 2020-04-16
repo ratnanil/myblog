@@ -1,0 +1,247 @@
+---
+title: "Analysing a 10 year old Podcast"
+author: "Nils Ratnaweera"
+date: "2020-03-01T22:00:00+01:00"
+categories: ["R"]
+tags: ["podcast","R"]
+---
+
+
+
+<pre class="r"><code>library(tidyverse)
+## Warning: Paket &#39;tidyverse&#39; wurde unter R Version 3.6.3 erstellt
+## -- Attaching packages --------------------------------------------------------------------------------------------------------------------------------- tidyverse 1.3.0 --
+## v ggplot2 3.3.0     v purrr   0.3.3
+## v tibble  2.1.3     v dplyr   0.8.3
+## v tidyr   1.0.2     v stringr 1.4.0
+## v readr   1.3.1     v forcats 0.4.0
+## Warning: Paket &#39;tidyr&#39; wurde unter R Version 3.6.3 erstellt
+## Warning: Paket &#39;purrr&#39; wurde unter R Version 3.6.3 erstellt
+## Warning: Paket &#39;dplyr&#39; wurde unter R Version 3.6.1 erstellt
+## -- Conflicts ------------------------------------------------------------------------------------------------------------------------------------ tidyverse_conflicts() --
+## x dplyr::filter() masks stats::filter()
+## x dplyr::lag()    masks stats::lag()
+library(ggrepel)
+## Warning: Paket &#39;ggrepel&#39; wurde unter R Version 3.6.1 erstellt
+library(scales)
+## 
+## Attache Paket: &#39;scales&#39;
+## The following object is masked from &#39;package:purrr&#39;:
+## 
+##     discard
+## The following object is masked from &#39;package:readr&#39;:
+## 
+##     col_factor
+library(tidytext)
+## Warning: Paket &#39;tidytext&#39; wurde unter R Version 3.6.1 erstellt
+library(lubridate)
+## 
+## Attache Paket: &#39;lubridate&#39;
+## The following object is masked from &#39;package:base&#39;:
+## 
+##     date
+
+theme_set(theme_minimal())</code></pre>
+<pre class="r"><code>head(folgenuebersicht)
+## # A tibble: 6 x 6
+##   title     date                duration item_link         rz_folge title_clean 
+##   &lt;chr&gt;     &lt;dttm&gt;                 &lt;dbl&gt; &lt;chr&gt;                &lt;dbl&gt; &lt;chr&gt;       
+## 1 RZ085 Er~ 2020-03-07 23:00:00      115 https://raumzeit~       85 Erforschung~
+## 2 RZ084 Be~ 2020-02-06 23:00:00      123 https://raumzeit~       84 Besuch beim~
+## 3 RZ083 Sp~ 2020-01-16 23:00:00      164 https://raumzeit~       83 SpaceX      
+## 4 RZ082 Bo~ 2019-12-19 23:00:00      127 https://raumzeit~       82 Bodenerkund~
+## 5 Raumzeit~ 2019-12-04 23:00:00        8 https://raumzeit~       NA Raumzeit 20~
+## 6 RZ081 Hu~ 2019-11-28 23:00:00      104 https://raumzeit~       81 Hubble-Welt~</code></pre>
+<div id="number-of-episodes-per-year" class="section level3">
+<h3>Number of Episodes per Year</h3>
+<p>The podcast has had different phases over the years and the number of podcast’s released each year varies significantly. The first Episode was released end of 2010. In 2011, Tim Pritlove published 25 episodes, the highest number of episodes he would ever publish thereafter. His project was initially funded externally and when the sponsors ended their contact in 2013, Tim took a break to regroup and find a different method to finance his podcast. He found a way and as of 2015, has be been steadily growing the number of episodes published each year.</p>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+</div>
+<div id="episode-duration" class="section level3">
+<h3>Episode duration</h3>
+<p>What is remarkable about this podcast, is that Tim takes as much time as he needs with each guest, and doesn’t really keep an eye on the time. In his 87 podcasts to date he has spent over 145 hours speaking to his guests, which means an avarage of 100 minutes per episode.</p>
+<p>The podcast’s duration can vary significantly, and I had wondered if there was some trend over time. Apparently, this does not seem to be the case, as shown in the following graph:</p>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>The two very short episodes are small housekeeping / information podcasts of which Tim has only produced two.</p>
+</div>
+<div id="listener-interaction" class="section level2">
+<h2>Listener interaction</h2>
+<p>I was interested to know how intense the interaction was in regard to each podcast. I found two metrics with which this can be quantified:</p>
+<ul>
+<li>The replies posted on the <a href="https://raumzeit-podcast.de/">podcat’s website</a></li>
+<li>Twitter metrics (retweets, favourites, replies) of tweets Tim Pritlove posted after the appearance of a podcast with the user handle @raumzeit.</li>
+</ul>
+<div id="website-replies" class="section level3">
+<h3>Website replies</h3>
+<p>Again, using <code>rvest</code> I scraped the website to retrieve the replies for each podcast.</p>
+<p>I was expecting some podcasts to have a high listener interaction and much discussion over time while others probabbly provoked little or no listener interaction. Old episodes have had a longer time period for such interaction, and so i wanted to visualize the intensity of the interaction (i.e. replies) in such a way, that this aspect becomes apparent.</p>
+<pre><code>## Warning: Removed 11 row(s) containing missing values (geom_path).
+## Warning: Removed 11 rows containing missing values (geom_point).
+
+## Warning: Removed 11 rows containing missing values (geom_point).</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<pre class="r"><code>folgen_replies_smry &lt;- folgen_replies %&gt;%
+  group_by_at(1:6) %&gt;%
+  count(name = &quot;Replies&quot;) %&gt;%
+  arrange(-Replies) %&gt;%
+  ungroup() %&gt;%
+  mutate(
+    title_clean = fct_reorder(title_clean,Replies)
+    )</code></pre>
+<pre class="r"><code>folgen_replies_smry %&gt;%
+  head(20) %&gt;%
+  ggplot(aes(title_clean,Replies)) +
+  geom_col() +
+  ggplot2::coord_flip() +
+  labs(y = &quot;# Replies&quot;,x = &quot;&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<pre class="r"><code>
+folgen_replies_smry_filter &lt;- filter(folgen_replies_smry, Replies &gt; 40)
+
+folgen_replies_smry %&gt;%
+  ggplot(aes(date,Replies, label = title_clean)) +
+  geom_point() +
+  geom_point(data = folgen_replies_smry_filter, colour = &quot;red&quot;) +
+  geom_label_repel(data = folgen_replies_smry_filter,min.segment.length = 0) +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE) +
+  labs(y = &quot;# Replies&quot;,x = &quot;Release Date&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<pre class="r"><code>
+folgen_replies_unnest &lt;- folgen_replies %&gt;%
+  unnest_tokens(word,comment)
+
+
+stopwords &lt;- tidytext::get_stopwords(&quot;de&quot;)
+
+folgen_replies_unnest &lt;- folgen_replies_unnest %&gt;%
+  anti_join(stopwords, by = &quot;word&quot;)
+
+
+# folgen_replies_unnest %&gt;%
+#   group_by(rz_folge,title_clean,word) %&gt;%
+#   count() %&gt;%
+#   filter(n &gt; 10) %&gt;%
+#   bind_tf_idf(word,rz_folge,n) %&gt;%
+#   group_by(rz_folge) %&gt;%
+#   arrange(rz_folge,desc(tf_idf)) %&gt;%
+#   filter(n() == 1)
+  </code></pre>
+<pre class="r"><code>
+sent &lt;- c(
+  # positive Wörter
+  readLines(&quot;SentiWS_v2.0/SentiWS_v2.0_Positive.txt&quot;,
+            encoding = &quot;UTF-8&quot;),
+  # negative Wörter
+  readLines(&quot;SentiWS_v2.0/SentiWS_v2.0_Negative.txt&quot;,
+            encoding = &quot;UTF-8&quot;)
+) %&gt;% lapply(function(x) {
+  # Extrahieren der einzelnen Spalten
+  res &lt;- strsplit(x, &quot;\t&quot;, fixed = TRUE)[[1]]
+  return(data.frame(words = res[1], value = res[2],
+                    stringsAsFactors = FALSE))
+}) %&gt;%
+  bind_rows %&gt;% 
+  mutate(words = gsub(&quot;\\|.*&quot;, &quot;&quot;, words) %&gt;% tolower,
+         value = as.numeric(value)) %&gt;% 
+  # manche Wörter kommen doppelt vor, hier nehmen wir den mittleren Wert
+  group_by(words) %&gt;% summarise(value = mean(value)) %&gt;% ungroup
+
+
+
+folgen_replies_unnest &lt;- inner_join(folgen_replies_unnest,sent,by = c(&quot;word&quot; = &quot;words&quot;))
+
+folgen_reply_sent &lt;- folgen_replies_unnest %&gt;%
+  group_by_at(1:7) %&gt;%
+  summarise(value = mean(value)) %&gt;%
+  group_by_at(1:6) %&gt;%
+  summarise(
+    median = median(value),
+    q25 = quantile(value,0.25),
+    q75 = quantile(value,0.75),
+    n = n(),
+  ) 
+ggplot(folgen_reply_sent, aes(n,median,ymin = q25,ymax = q75, colour = factor(rz_folge))) +
+  # geom_point() +,
+  geom_pointrange() +
+  geom_hline(yintercept = 0) +
+  labs(x = &quot;Number of replies&quot;,y = &quot;Mean sentiment&quot;) +
+  lims(y = c(-1,1)) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<pre class="r"><code>
+folgen_reply_sent_fil &lt;- folgen_reply_sent %&gt;%
+  filter(median &gt; 0.3 | median&lt; -0.1)
+
+folgen_reply_sent %&gt;%
+  ggplot(aes(factor(rz_folge),median,label = title_clean)) +
+  geom_point() +
+  # geom_label_repel(data = folgen_reply_sent_fil,nudge_y = folgen_reply_sent_fil$value) +
+  scale_y_continuous(limits = c(-1,1)) +
+  labs(x = &quot;Raumzeit-Folge&quot;,y = &quot;Mittleres &#39;sentiment&#39;&quot;)</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-13-2.png" width="672" /></p>
+<pre class="r"><code>
+
+folgen_replies_unnest %&gt;%
+  group_by(word,value) %&gt;%
+  count() %&gt;%
+  arrange(desc(value))
+## # A tibble: 743 x 3
+## # Groups:   word, value [743]
+##    word              value     n
+##    &lt;chr&gt;             &lt;dbl&gt; &lt;int&gt;
+##  1 gelungen          1         6
+##  2 perfekt           0.730     6
+##  3 lob               0.725     8
+##  4 wunderbar         0.723     8
+##  5 spannend          0.716    60
+##  6 freude            0.650    11
+##  7 mut               0.609     1
+##  8 freundlich        0.602     1
+##  9 hervorragend      0.589    11
+## 10 abwechslungsreich 0.580     1
+## # ... with 733 more rows
+
+folgen_replies_unnest %&gt;%
+  filter(title_clean == &quot;Mars Express&quot;) %&gt;%
+  pull(word)
+## [1] &quot;gelungen&quot; &quot;spannend&quot; &quot;sprung&quot;   &quot;super&quot;</code></pre>
+</div>
+<div id="twitter-data" class="section level3">
+<h3>Twitter Data</h3>
+<pre class="r"><code>raumtweets_folgen &lt;- read_csv(&quot;raumtweets_folgen.csv&quot;)
+## Parsed with column specification:
+## cols(
+##   created_at = col_datetime(format = &quot;&quot;),
+##   text = col_character(),
+##   favorite_count = col_double(),
+##   retweet_count = col_double(),
+##   rz_folge = col_double(),
+##   item_link = col_character(),
+##   title_clean = col_character(),
+##   date = col_datetime(format = &quot;&quot;)
+## )</code></pre>
+<pre class="r"><code>
+raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,retweet_count&gt;30)
+
+ggplot(raumtweets_folgen, aes(created_at,retweet_count,label = title_clean)) +
+  geom_point() +
+  theme(legend.position = &quot;none&quot;) +
+  geom_point(data = raumtweets_folgen_filter,colour = &quot;red&quot;) +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE) +
+  geom_label_repel(data = raumtweets_folgen_filter,nudge_x = 5,nudge_y = 5) +
+  labs(x = &quot;Tweet Date&quot;, y = &quot;Retweet Count&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<pre class="r"><code>
+raumtweets_folgen_filter &lt;- filter(raumtweets_folgen,favorite_count&gt;70)
+ggplot(raumtweets_folgen, aes(created_at,favorite_count,label = title_clean)) +
+  geom_point() +
+  geom_point(data = raumtweets_folgen_filter, colour = &quot;red&quot;) +
+  geom_smooth(method = &quot;loess&quot;,se = FALSE)  +
+  geom_label_repel(data = raumtweets_folgen_filter, nudge_x = 5,nudge_y = 5) +
+  labs(x = &quot;Tweet Date&quot;, y = &quot;Favourites Count&quot;)
+## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="/post/2020_02_29_Raumzeit/2020_02_29_Raumzeit_Analysis_files/figure-html/unnamed-chunk-15-2.png" width="672" /></p>
+</div>
+</div>
