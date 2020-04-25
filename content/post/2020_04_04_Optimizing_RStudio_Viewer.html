@@ -38,7 +38,7 @@ nc &lt;- read_sf(system.file(&quot;shape/nc.shp&quot;, package=&quot;sf&quot;))[
 <pre class="r"><code>plot</code></pre>
 <pre><code>## function (x, y, ...) 
 ## UseMethod(&quot;plot&quot;)
-## &lt;bytecode: 0x00000000071fb538&gt;
+## &lt;bytecode: 0x000000000a6bb780&gt;
 ## &lt;environment: namespace:graphics&gt;</code></pre>
 <p>We can turn <code>View</code> into a generic with <code>UseMethod()</code>:</p>
 <p>(Hadley states in his book that writing a method is considered “exceedingly bad manners” if you don’t own the generic or the class. But since I doing all this in my own, private R-Session this is probably OK)</p>

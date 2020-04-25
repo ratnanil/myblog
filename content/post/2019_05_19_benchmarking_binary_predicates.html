@@ -8,6 +8,12 @@ tags: ["GIS", "sf","benchmarking","R"]
 
 
 
+<div id="tldr" class="section level2">
+<h2>TL;DR</h2>
+<p>Say you want to find out whether some spatial points lie in a polygon or not (for example, if you want to filter all train stations located within a state). When using the package <code>sf</code> in <code>R</code>, several function can lead you to the same result. You can use: <code>st_within</code>, <code>st_contains</code>, <code>st_intersects</code> or <code>st_covered_by</code>, and if your dataset is large, speed matters. I wanted to test which function is the fastest and as it turns out, <code>st_contains</code> is the clear winner.</p>
+</div>
+<div id="the-premise" class="section level2">
+<h2>The Premise</h2>
 <p>I had recently needed to filter some 30k Points based on whether they were within a certain polygon or not. It looked something like this:</p>
 <pre class="r"><code>library(sf)
 library(tidyverse)
@@ -23,7 +29,8 @@ ggplot() +
   geom_sf(data = monte_generoso,fill = &quot;red&quot;,alpha = 0.3) + 
   theme_void()</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
-<p>My first approach was to use <code>st_within()</code> from my favourite <code>R</code> package <code>sf</code>, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. “<em>Is the point <em>within</em> the polygon?</em>” can also be rephrased to “<em>Does the polygon <em>contain</em> this point?</em>” (using <code>st_contains</code>) and in my case, <code>st_intersects</code> / <code>st_covered_by</code> do the job as well. Note: <code>st_intersects</code> is slightly different to <code>st_within</code> / <code>st_contains</code> / <code>st_covered_by</code>, especially when points are precisely on the line. Also note that dimensions of the resulting matrix vary depending on which operation is used.</p>
+<p>My first approach was to use <code>st_within()</code> from my favourite <code>R</code> package <code>sf</code>, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. “<em>Is the point <em>within</em> the polygon?</em>” can also be rephrased to “<em>Does the polygon <em>contain</em> this point?</em>” (using <code>st_contains</code>) and in my case, <code>st_intersects</code> and <code>st_covered_by</code> do the job as well.</p>
+<p>(Note: <code>st_intersects</code> is slightly different to <code>st_within</code> / <code>st_contains</code> / <code>st_covered_by</code>, especially when points are precisely on the line. Also note that dimensions of the resulting matrix vary depending on which operation is used.)</p>
 <pre class="r"><code>points_filter1 &lt;- points[st_within(points,monte_generoso,sparse = FALSE)[,1]]
 points_filter2 &lt;- points[st_contains(monte_generoso,points,sparse = FALSE)[1,]]
 points_filter3 &lt;- points[st_intersects(points,monte_generoso,sparse = FALSE)[,1]]
@@ -37,7 +44,10 @@ ggplot()  + geom_sf(data = monte_generoso)+ geom_sf(data = points_filter1) + the
 <pre><code>## [1] TRUE</code></pre>
 <pre class="r"><code>identical(points_filter1,points_filter4)</code></pre>
 <pre><code>## [1] TRUE</code></pre>
-<p>I was amazed to find that <code>st_within</code> was much faster than <code>st_contains</code> and so I decided to benchmark all functions with <code>microbenchmark</code>. Since it doesn’t always take the same amount of time to process a function, it makes sense to run each function multiple times (<code>times = 100</code>).</p>
+</div>
+<div id="benchmarking-the-functions" class="section level2">
+<h2>Benchmarking the functions</h2>
+<p>To find out which function does the job fastest, I decided to benchmark all functions with <code>microbenchmark</code>. Since it doesn’t always take the same amount of time to process the same function, it makes sense to run each function multiple times (<code>times = 100</code>).</p>
 <pre class="r"><code>mbm  &lt;- microbenchmark(
   intersects = st_intersects(monte_generoso,points),
   within = st_within(points,monte_generoso),
@@ -48,22 +58,24 @@ ggplot()  + geom_sf(data = monte_generoso)+ geom_sf(data = points_filter1) + the
 
 mbm$time &lt;- microbenchmark:::convert_to_unit(mbm$time,&quot;t&quot;)
 
-mbm &lt;- mbm %&gt;%
+mbm %&gt;%
   mutate(
     expr = fct_reorder(expr,time,median,.desc = TRUE)
-  )
-
-
-ggplot(mbm, aes(time,expr,fill = ..x..)) +
+  ) %&gt;%
+  ggplot(aes(time,expr,fill = ..x..)) +
   geom_density_ridges_gradient(scale = 2, rel_min_height = 0.01) +
   scale_fill_viridis_c(option = &quot;C&quot;)  +
   labs(y = &quot;Function&quot;,x = paste0(&quot;Duration (in &quot;,attr(mbm$time,&quot;unit&quot;),&quot;)&quot;)) +
-  theme(legend.position=&quot;none&quot;) +
-  theme_minimal()</code></pre>
-<pre><code>## Picking joint bandwidth of 0.61</code></pre>
+  theme_minimal() +
+  theme(legend.position=&quot;none&quot;)</code></pre>
+<pre><code>## Picking joint bandwidth of 0.392</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
-<p>What we can see in the plot above, is that <code>st_within</code> sometimes took nearly 50ms, but usually around 18ms. This is still slower than both <code>st_contains</code> (around 11ms) and <code>st_within</code> (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I’ll test this by raising the number of points in <code>point</code>.</p>
-<pre class="r"><code>mbm2 &lt;- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
+<p>What we can see in the plot above, is that <code>st_within</code> and <code>st_covered_by</code> are similar in speed and the slowest of the four functions.</p>
+</div>
+<div id="scalability-raising-the-number-of-points" class="section level2">
+<h2>Scalability: Raising the number of points</h2>
+<p>I ran the function with a thousand points, but but my real life problem had 30’000. So the question is: How do the functions scale? Some functions are better on larger datasets than on smaller ones. So I’ll test this by raising the number of points in <code>point</code>.</p>
+<pre class="r"><code>mbm2 &lt;- map_dfr(c(5e3,1e4,2e4),function(n_points){
   
   points &lt;- st_sample(st_buffer(monte_generoso,1000),n_points,what = &quot;centers&quot;)
 
@@ -77,98 +89,22 @@ ggplot(mbm, aes(time,expr,fill = ..x..)) +
   as.data.frame(mbm) %&gt;%
     mutate(n = n_points)
 })</code></pre>
-<p>Since I now have a new dimension in my data (number of points) don’t want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a line range indicating the 1. and 3. Quartiles.</p>
+<p>Apparently, <code>st_contains</code> is still the fastest function of all four, as you can see in the plot below. So the take home message for me: use <code>st_contains</code> when you can!</p>
 <pre class="r"><code>mbm2$time &lt;- microbenchmark:::convert_to_unit(mbm2$time,&quot;t&quot;)
 
 
+
 mbm2 %&gt;%
-  group_by(expr,n) %&gt;%
-  summarise(
-    median = median(time),
-    q25 = quantile(time,0.25),
-    q75 = quantile(time,0.75)
-  ) %&gt;%
-ggplot(aes(n,median, colour = expr)) +
-  geom_line() +
-  geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = &quot;# data points&quot;,y = paste0(&quot;Duration (in &quot;,attr(mbm2$time,&quot;unit&quot;),&quot;)&quot;), colour = &quot;Binary Predicate Operation&quot;) +
-  expand_limits(y = 0) +
+  mutate(
+    n = fct_reorder(formatC(n,big.mark = &quot;&#39;&quot;,format = &quot;fg&quot;),n),
+    expr = fct_reorder(expr,time,median,.desc = TRUE)
+    ) %&gt;%
+  ggplot(aes(time,expr,fill = n)) +
+  geom_density_ridges_gradient(rel_min_height = 0.01) +
+  scale_fill_manual(name = &quot;Number of points&quot;, values = RColorBrewer::brewer.pal(3, &quot;YlOrRd&quot;)) +
+  labs(y = &quot;Function&quot;,x = paste0(&quot;Duration (in &quot;,attr(mbm$time,&quot;unit&quot;),&quot;)&quot;)) +
   theme_minimal() +
-  theme(legend.position = &quot;bottom&quot;) </code></pre>
+  theme(legend.position = &quot;bottom&quot;)</code></pre>
+<pre><code>## Picking joint bandwidth of 1.85</code></pre>
 <p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
-<p>It’s still the case that <code>st_within</code> is slower by along run, and additionally seems to scale non-linearly. I’m giving <code>st_within</code> one more chance to pull itself together and prove it’s worth by raising the number of <em>circles</em> (polygons) that I’m querying with:</p>
-<pre class="r"><code>mbm3 &lt;- map_dfr(c(1,5,20,100,500),function(n_circles){
-  
-  points &lt;- st_sample(st_buffer(monte_generoso,1000),1000,what = &quot;centers&quot;)
-  circles &lt;-   st_sample(st_buffer(monte_generoso,1000),n_circles,what = &quot;centers&quot;) %&gt;%
-    st_buffer(500)
-
-  mbm  &lt;- microbenchmark(
-  intersects = st_intersects(monte_generoso,points),
-  within = st_within(points,monte_generoso),
-  contains = st_contains(monte_generoso,points),
-  covered_by = st_covered_by(points,monte_generoso),
-  times = 10
-  )
-  as.data.frame(mbm) %&gt;%
-    mutate(n = n_circles)
-})
-
-mbm3$time &lt;- microbenchmark:::convert_to_unit(mbm3$time,&quot;t&quot;)
-
-
-mbm3 %&gt;%
-  group_by(expr,n) %&gt;%
-  summarise(
-    median = median(time),
-    q25 = quantile(time,0.25),
-    q75 = quantile(time,0.75)
-  ) %&gt;%
-ggplot(aes(n,median, colour = expr)) +
-  geom_line() +
-  geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = &quot;# data circles&quot;,y = paste0(&quot;Duration (in &quot;,attr(mbm3$time,&quot;unit&quot;),&quot;)&quot;), colour = &quot;Binary Predicate Operation&quot;) +
-  expand_limits(y = 0) +
-  theme_minimal() +
-  theme(legend.position = &quot;bottom&quot;) </code></pre>
-<p><img src="/post/2019_05_19_benchmarking_binary_predicates_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
-<p>Nope.. still too slow by a long way. Unexpected for me however, is the fact that the number of polygons does not slow the process. Take home message: use <code>st_contains</code> when you can.</p>
-<p>[][(<a href="https://i.makeagif.com/media/6-06-2018/BOq_ui.gif" class="uri">https://i.makeagif.com/media/6-06-2018/BOq_ui.gif</a>)</p>
-<pre class="r"><code>sessionInfo()</code></pre>
-<pre><code>## R version 3.6.0 (2019-04-26)
-## Platform: x86_64-w64-mingw32/x64 (64-bit)
-## Running under: Windows 10 x64 (build 18363)
-## 
-## Matrix products: default
-## 
-## locale:
-## [1] LC_COLLATE=German_Switzerland.1252  LC_CTYPE=German_Switzerland.1252   
-## [3] LC_MONETARY=German_Switzerland.1252 LC_NUMERIC=C                       
-## [5] LC_TIME=German_Switzerland.1252    
-## 
-## attached base packages:
-## [1] stats     graphics  grDevices utils     datasets  methods   base     
-## 
-## other attached packages:
-##  [1] ggridges_0.5.2       cowplot_1.0.0        microbenchmark_1.4-7
-##  [4] forcats_0.4.0        stringr_1.4.0        dplyr_0.8.3         
-##  [7] purrr_0.3.3          readr_1.3.1          tidyr_1.0.2         
-## [10] tibble_2.1.3         ggplot2_3.3.0        tidyverse_1.3.0     
-## [13] sf_0.9-0            
-## 
-## loaded via a namespace (and not attached):
-##  [1] Rcpp_1.0.2         lubridate_1.7.4    lattice_0.20-38    class_7.3-15      
-##  [5] assertthat_0.2.1   digest_0.6.20      R6_2.4.0           cellranger_1.1.0  
-##  [9] plyr_1.8.4         backports_1.1.4    reprex_0.3.0       evaluate_0.14     
-## [13] e1071_1.7-2        httr_1.4.1         blogdown_0.17.1    pillar_1.4.2      
-## [17] rlang_0.4.5        readxl_1.3.1       rstudioapi_0.10    rmarkdown_2.1     
-## [21] labeling_0.3       munsell_0.5.0      broom_0.5.2        compiler_3.6.0    
-## [25] modelr_0.1.5       xfun_0.12          pkgconfig_2.0.2    htmltools_0.3.6   
-## [29] tidyselect_0.2.5   bookdown_0.14      viridisLite_0.3.0  crayon_1.3.4      
-## [33] dbplyr_1.4.2       withr_2.1.2        grid_3.6.0         nlme_3.1-141      
-## [37] jsonlite_1.6       gtable_0.3.0       lifecycle_0.1.0    DBI_1.0.0         
-## [41] magrittr_1.5       units_0.6-3        scales_1.0.0       KernSmooth_2.23-15
-## [45] cli_1.1.0          stringi_1.4.3      fs_1.3.1           xml2_1.2.4        
-## [49] ellipsis_0.3.0     vctrs_0.2.4        generics_0.0.2     tools_3.6.0       
-## [53] glue_1.3.1         hms_0.5.3          yaml_2.2.0         colorspace_1.4-1  
-## [57] classInt_0.4-1     rvest_0.3.5        knitr_1.28         haven_2.2.0</code></pre>
+</div>

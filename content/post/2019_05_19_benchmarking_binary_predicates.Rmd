@@ -7,9 +7,16 @@ tags: ["GIS", "sf","benchmarking","R"]
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+
+## TL;DR
+
+Say you want to find out whether some spatial points lie in a polygon or not (for example, if you want to filter all train stations located within a state). When using the package `sf` in `R`, several function can lead you to the same result. You can use: `st_within`, `st_contains`, `st_intersects` or `st_covered_by`, and if your dataset is large, speed matters. I wanted to test which function is the fastest and as it turns out, `st_contains` is the clear winner.
+
+
+## The Premise
 
 I had recently needed to filter some 30k Points based on whether they were within a certain polygon or not. It looked something like this:
 ```{r, warning=FALSE,message=FALSE}
@@ -31,7 +38,9 @@ ggplot() +
 
 ```
 
-My first approach was to use `st_within()` from my favourite `R` package `sf`, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. "_Is the point *within* the polygon?_" can also be rephrased to "_Does the polygon *contain* this point?_" (using `st_contains`) and in my case, `st_intersects` / `st_covered_by` do the job as well. Note: `st_intersects` is slightly different to `st_within` / `st_contains` / `st_covered_by`, especially when points are precisely on the line. Also note that dimensions of the resulting matrix vary depending on which operation is used.
+My first approach was to use `st_within()` from my favourite `R` package `sf`, but I had to abort the process before it was finished since it took too long. There was not much I could do to optimize the code, so I had to look for alternatives. "_Is the point *within* the polygon?_" can also be rephrased to "_Does the polygon *contain* this point?_" (using `st_contains`) and in my case, `st_intersects` and `st_covered_by` do the job as well. 
+
+(Note: `st_intersects` is slightly different to `st_within` / `st_contains` / `st_covered_by`, especially when points are precisely on the line. Also note that dimensions of the resulting matrix vary depending on which operation is used.)
 
 
 ```{r}
@@ -48,7 +57,10 @@ identical(points_filter1,points_filter4)
 
 ```
 
-I was amazed to find that `st_within` was much faster than `st_contains` and so I decided to benchmark all functions with `microbenchmark`. Since it doesn't always take the same amount of time to process a function, it makes sense to run each function multiple times (`times = 100`).
+
+## Benchmarking the functions
+
+To find out which function does the job fastest, I decided to benchmark all functions with `microbenchmark`. Since it doesn't always take the same amount of time to process the same function, it makes sense to run each function multiple times (`times = 100`).
 
 
 ```{r}
@@ -62,25 +74,28 @@ mbm  <- microbenchmark(
 
 mbm$time <- microbenchmark:::convert_to_unit(mbm$time,"t")
 
-mbm <- mbm %>%
+mbm %>%
   mutate(
     expr = fct_reorder(expr,time,median,.desc = TRUE)
-  )
-
-
-ggplot(mbm, aes(time,expr,fill = ..x..)) +
+  ) %>%
+  ggplot(aes(time,expr,fill = ..x..)) +
   geom_density_ridges_gradient(scale = 2, rel_min_height = 0.01) +
   scale_fill_viridis_c(option = "C")  +
   labs(y = "Function",x = paste0("Duration (in ",attr(mbm$time,"unit"),")")) +
-  theme(legend.position="none") +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position="none")
+
 ```
 
-What we can see in the plot above, is that `st_within` sometimes took nearly 50ms, but usually around 18ms. This is still slower than both `st_contains` (around 11ms) and `st_within` (around 12ms). The question now is, how do the functions scale? Some functions are better on larger datasets than on smaller ones. So I'll test this by raising the number of points in `point`.
+What we can see in the plot above, is that `st_within` and `st_covered_by` are similar in speed and the slowest of the four functions.
+
+## Scalability: Raising the number of points
+
+I ran the function with a thousand points, but but my real life problem had 30'000. So the question is: How do the functions scale? Some functions are better on larger datasets than on smaller ones. So I'll test this by raising the number of points in `point`.
 
 
 ```{r}
-mbm2 <- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
+mbm2 <- map_dfr(c(5e3,1e4,2e4),function(n_points){
   
   points <- st_sample(st_buffer(monte_generoso,1000),n_points,what = "centers")
 
@@ -96,79 +111,25 @@ mbm2 <- map_dfr(c(10,100,500,1000,5000,10000),function(n_points){
 })
 ```
 
-Since I now have a new dimension in my data (number of points) don't want to use the violin plot from above, but make my plot more compact using a line plot. In order to also visualize the distribution of the data, I add a line range indicating the 1. and 3. Quartiles.
+
+Apparently, `st_contains` is still the fastest function of all four, as you can see in the plot below. So the take home message for me: use `st_contains` when you can!
 
 ```{r}
 
 mbm2$time <- microbenchmark:::convert_to_unit(mbm2$time,"t")
 
 
+
 mbm2 %>%
-  group_by(expr,n) %>%
-  summarise(
-    median = median(time),
-    q25 = quantile(time,0.25),
-    q75 = quantile(time,0.75)
-  ) %>%
-ggplot(aes(n,median, colour = expr)) +
-  geom_line() +
-  geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = "# data points",y = paste0("Duration (in ",attr(mbm2$time,"unit"),")"), colour = "Binary Predicate Operation") +
-  expand_limits(y = 0) +
+  mutate(
+    n = fct_reorder(formatC(n,big.mark = "'",format = "fg"),n),
+    expr = fct_reorder(expr,time,median,.desc = TRUE)
+    ) %>%
+  ggplot(aes(time,expr,fill = n)) +
+  geom_density_ridges_gradient(rel_min_height = 0.01) +
+  scale_fill_manual(name = "Number of points", values = RColorBrewer::brewer.pal(3, "YlOrRd")) +
+  labs(y = "Function",x = paste0("Duration (in ",attr(mbm$time,"unit"),")")) +
   theme_minimal() +
-  theme(legend.position = "bottom") 
-
-```
-
-It's still the case that `st_within` is slower by  along run, and additionally seems to scale non-linearly. I'm giving `st_within` one more chance to pull itself together and prove it's worth by raising the number of _circles_ (polygons) that I'm querying with:
-
-```{r}
-
-
-mbm3 <- map_dfr(c(1,5,20,100,500),function(n_circles){
+  theme(legend.position = "bottom")
   
-  points <- st_sample(st_buffer(monte_generoso,1000),1000,what = "centers")
-  circles <-   st_sample(st_buffer(monte_generoso,1000),n_circles,what = "centers") %>%
-    st_buffer(500)
-
-  mbm  <- microbenchmark(
-  intersects = st_intersects(monte_generoso,points),
-  within = st_within(points,monte_generoso),
-  contains = st_contains(monte_generoso,points),
-  covered_by = st_covered_by(points,monte_generoso),
-  times = 10
-  )
-  as.data.frame(mbm) %>%
-    mutate(n = n_circles)
-})
-
-mbm3$time <- microbenchmark:::convert_to_unit(mbm3$time,"t")
-
-
-mbm3 %>%
-  group_by(expr,n) %>%
-  summarise(
-    median = median(time),
-    q25 = quantile(time,0.25),
-    q75 = quantile(time,0.75)
-  ) %>%
-ggplot(aes(n,median, colour = expr)) +
-  geom_line() +
-  geom_pointrange(aes(ymin = q25,ymax = q75)) +
-  labs(x = "# data circles",y = paste0("Duration (in ",attr(mbm3$time,"unit"),")"), colour = "Binary Predicate Operation") +
-  expand_limits(y = 0) +
-  theme_minimal() +
-  theme(legend.position = "bottom") 
-
 ```
-
-Nope.. still too slow by a long way. Unexpected for me however, is the fact that the number of polygons does not slow the process. Take home message: use `st_contains` when you can.
-
-[][(https://i.makeagif.com/media/6-06-2018/BOq_ui.gif)
-
-
-
-```{r}
-sessionInfo()
-```
-
