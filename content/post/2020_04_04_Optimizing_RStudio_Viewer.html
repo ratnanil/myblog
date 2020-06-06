@@ -15,9 +15,9 @@ tags: ["podcast","R"]
 <div id="console-vs.-view" class="section level2">
 <h2>Console vs. View()</h2>
 <p>The <code>View</code> function is a handy way to look at your tabular data in R, and is probably my most used function during an R Session. <code>sf</code> objects however, are best viewed in the console. As seen below, printing the sf object to the console prints some metadata like geometry type, the bbox and CRS. But more importantly, printing to the console is <code>much faster</code> than the RStudio Viewer. The latter is slow, partially because of it tries to display the content of the geometry column. This is unnecessary, since the content is a huge list column containing the coordinates of our features, and is not perticularly human readable.</p>
-<pre class="r"><code>library(sf)
-
-nc &lt;- read_sf(system.file(&quot;shape/nc.shp&quot;, package=&quot;sf&quot;))[,&quot;NAME&quot;]</code></pre>
+<pre class="r"><code>library(sf)</code></pre>
+<pre><code>## Warning: Paket &#39;sf&#39; wurde unter R Version 3.6.3 erstellt</code></pre>
+<pre class="r"><code>nc &lt;- read_sf(system.file(&quot;shape/nc.shp&quot;, package=&quot;sf&quot;))[,&quot;NAME&quot;]</code></pre>
 <pre class="r"><code>View(nc)</code></pre>
 <p><img src="/img/viewer_sf_normal.jpg" /></p>
 <p>For this reason, I usually use the console to have a look at my <code>sf</code> objects. But sometimes I want to explore my datasets interactively: Filter for certain words, sort by various columns etc. The RStudio Viewer is much more handy for this. So I decided to optimize my <code>View</code>-function to mimic the built in print method. It’s important however:</p>
@@ -30,23 +30,12 @@ nc &lt;- read_sf(system.file(&quot;shape/nc.shp&quot;, package=&quot;sf&quot;))[
 <h2>On the nature of View(), generics and methods</h2>
 <p>For this case, it would be ideal if <code>View</code> was a generic, similar to <code>print</code> or <code>mean</code>.</p>
 <p>(I’m not sure if I’ve got the terminology right, but you can read up on this stuff in Hadley’s <a href="https://adv-r.hadley.nz/s3.html#s3-arguments">amazing Advanced R Book</a>).</p>
-<p>If View were a generic, we could just define a custom method to said generic and <em>voilà</em>. Unfortunately, <code>View</code> is <em>not</em> a generic, you can check this by typing <code>View</code> into the console and comparing it to <code>plot</code> (which is a generic).</p>
-<pre class="r"><code>View</code></pre>
-<pre class="r"><code>## function (...) 
-## .rs.callAs(name, hook, original, ...)
-## &lt;environment: 0x0000025a2344eec8&gt;</code></pre>
-<pre class="r"><code>plot</code></pre>
-<pre><code>## function (x, y, ...) 
-## UseMethod(&quot;plot&quot;)
-## &lt;bytecode: 0x000000000a6bb780&gt;
-## &lt;environment: namespace:graphics&gt;</code></pre>
-<p>We can turn <code>View</code> into a generic with <code>UseMethod()</code>:</p>
-<p>(Hadley states in his book that writing a method is considered “exceedingly bad manners” if you don’t own the generic or the class. But since I doing all this in my own, private R-Session this is probably OK)</p>
+<p>If View were a generic, we could just define a custom method to said generic and <em>voilà</em>. Unfortunately, it’s not that simple and we have to turn <code>View</code> into a generic with <code>UseMethod()</code>:</p>
+<p>(Hadley states in his book that writing a method is considered “exceedingly bad manners” if you don’t own the generic or the class. But since I’m doing this in my own, private R-Session this is probably OK)</p>
 <pre class="r"><code>View &lt;- function(x, title) {
   UseMethod(&quot;View&quot;)
 }</code></pre>
-<p>Then, we can define a default method for <code>View</code>. We can’t use <code>utils::View</code> for this, since Rstudio overrides <code>View</code> on the search path (within the package <code>utils</code> environment). Since it’s not overwritten in the utils namespace, we can use <code>get</code>.</p>
-<p>(This is taken from <a href="https://stackoverflow.com/q/41532300/4139249">this stack-overflow Question</a>).</p>
+<p>Next we can define a default method for <code>View</code>. We can’t use <code>utils::View</code> for this, since <a href="https://stackoverflow.com/q/41532300/4139249">Rstudio overrides <code>View</code> on the search path</a> (within the package <code>utils</code> environment). Since it’s not overwritten in the utils namespace, we can use <code>get</code>.</p>
 <pre class="r"><code>View.default &lt;- function(...) {
   get(&#39;View&#39;, as.environment(&#39;package:utils&#39;))(...)
 }</code></pre>
@@ -97,5 +86,5 @@ nc &lt;- read_sf(system.file(&quot;shape/nc.shp&quot;, package=&quot;sf&quot;))[
 </div>
 <div id="make-this-the-default-behaviour" class="section level2">
 <h2>Make this the default behaviour</h2>
-<p>Using <code>View()</code> on <code>sf</code>-objects should now be much faster and more lightweight. To use this custom Version of <code>View()</code> in every R Session, I will now add the above code lines to my <a href="https://rstats.wtf/r-startup.html#rprofile">.Rprofile</a>. You can edit your rprofile by typing <code>usethis::edit_r_profile()</code> into the console if you have the package <code>usethis</code>, or <a href="https://stackoverflow.com/q/13735745/4139249">locating the file manually</a> if you don’t.</p>
+<p>Using <code>View()</code> on <code>sf</code>-objects should now be much faster and more lightweight. To use this custom Version of <code>View()</code> in every R Session, you can add the above code lines to your <a href="https://rstats.wtf/r-startup.html#rprofile">.Rprofile</a>. Edit your Rprofile by typing <code>usethis::edit_r_profile()</code> into the console if you have the package <code>usethis</code>, or <a href="https://stackoverflow.com/q/13735745/4139249">locating the file manually</a> if you don’t.</p>
 </div>

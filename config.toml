@@ -1,6 +1,6 @@
 baseurl = "/"
 languageCode = "en-us"
-title = "Nils Ratnaweeras personal Website"
+title = "Nils Ratnaweera's personal Website"
 theme = "hugo-lithium"
 googleAnalytics = ""
 disqusShortname = ""

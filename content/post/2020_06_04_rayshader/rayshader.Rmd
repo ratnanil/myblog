@@ -1,0 +1,126 @@
+---
+title: "Using rayshader to visualize Lake Zurich"
+author: "Nils Ratnaweera"
+date: "2020-06-06T23:00:00+01:00"
+categories: ["R"]
+tags: ["podcast","R"]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, warning = FALSE, message = FALSE)
+if(is.null(knitr::opts_knit$get("rmarkdown.pandoc.to"))){
+  setwd("content/post/2020_06_,04_rayshader")
+}
+```
+
+```{r}
+
+library(raster)
+library(sf)
+library(tidyverse)
+
+library(rayshader)
+library(lazyraster)
+library(geoviz)
+```
+
+
+I've long wanted to try out the [`rayshader`](https://www.rayshader.com/) package, and here's my blogpost visualizing the area where I live and work. I started out using the [swisstopo's DHM25_200 dataset](https://shop.swisstopo.admin.ch/en/products/free/free_geodata), which is an elevation model with 200m resolution provided free of charge by swisstopo. I later switched to the DEM which can easily be accessed with the function `mapzen_dem` from the `geoviz` package, which has a 25m resolution.
+
+```{r}
+# I've run the function only once and saved the output locally
+# dhm <- mapzen_dem(47.19552, 8.67463, 10)
+# writeRaster(dhm,"dhm_mapzen.tif")
+```
+
+The function returns a classical raster dataset in WGS84.
+```{r}
+dhm <- raster("dhm_mapzen.tif")
+dhm
+```
+
+
+Swisstopo provides satellite images in the "free geodata" section of their [homepage](https://shop.swisstopo.admin.ch/en/products/free/free_geodata), which I want to use as an overlay for the `rayshader` visualisation. 
+```{r}
+landsat <- brick("C:/Users/rata/Geodata/Landsat_25/LandsatMos25.tif")
+crs(landsat) <- st_crs(21781)$proj4string
+```
+
+Since they are in different coordinate system, at least one of the datasets needs to be projected. I prefer to work in the (projected) swiss coordinate system and will use the old one (EPSG 21781) since that is the coordinate system which the landsat dataset is in. 
+
+```{r}
+dhm <- projectRaster(dhm, crs = crs(landsat),method = "bilinear")
+dhm
+```
+
+With the projection, the DEM now has a funky resolution and extent. This would cause problems later on so I will create a new, clean raster dataset and extract the values from the DEM to prevent this. 
+
+```{r}
+
+# Round xmin to the next higher multiple of 25
+xmn <- ceiling(extent(dhm)@xmin/25)*25
+
+# Round xmin to the next lower multiple of 25
+
+xmx <- floor(extent(dhm)@xmax/25)*25
+ymn <- ceiling(extent(dhm)@ymin/25)*25
+ymx <- floor(extent(dhm)@ymax/25)*25
+
+dhm2 <- raster(res = res(landsat),xmn = xmn, xmx = xmx, ymn = ymn, ymx = ymx, vals = 1)
+
+dhm2 <- raster::resample(dhm,dhm2)
+```
+
+Now I need to convert the raster to a matrix so that I can use it in `rayshader`. The `raster` package provides an `as.matrix()` method for rasters, but `rayshader` has a custom function for this. Also, I can `crop` the landsat image to the extent of the DEM. 
+
+
+```{r}
+dhm_mat <- raster_to_matrix(dhm2)
+
+landsat <- crop(landsat, dhm2)
+```
+
+In order to use the `landsat` dataset as an overlay, we need to convert our raster dataset in the following manner:
+
+- rescale the values to 0 - 1 (instead of 0 - 255)
+- add a fourth layer to represent alpha (there probably is a better way to do this, but I don't know how)
+- convert the 4 layers into a 3-dimensional matrix
+- transpose each matrix, since since rasters and matrices are oriented differently in R
+
+```{r}
+landsat_mat_list <- lapply(as.list(landsat), function(x){t(raster_to_matrix(x)/255)})
+landsat_mat_list[[4]] <- t(raster_to_matrix(raster(nrows = nrow(landsat), ncols = ncol(landsat), ext = extent(landsat), resolution = raster::res(landsat), vals = 0.9)))
+```
+
+I then can bind these four layers together with the function `abind::abind`:
+
+```{r}
+library(abind)
+landsat_mat <- do.call(abind,list(landsat_mat_list,along = 3))
+
+zscale <- 15
+```
+
+
+```{r, eval = FALSE}
+dhm_mat %>%
+  sphere_shade(texture = "desert") %>%
+    add_overlay(landsat_mat) %>%
+  # add_water(detect_water(dhm_mat), color = "desert") %>%
+  add_shadow(ray_shade(dhm_mat), 0.5) %>%
+  add_shadow(ambient_shade(dhm_mat), 0) %>%
+  plot_3d(dhm_mat, zscale = zscale,fov = 0, theta = 160, zoom = 0.5, phi = 35, windowsize = c(1000, 1000),baseshape = "circle") 
+
+
+
+Sys.sleep(0.5)
+
+render_snapshot(filename = "rayshade.png")
+```
+
+```{r, echo = FALSE, out.width="120%",fig.align="center"}
+knitr::include_graphics("/img/rayshade.png",error = FALSE)
+```
+
+
+

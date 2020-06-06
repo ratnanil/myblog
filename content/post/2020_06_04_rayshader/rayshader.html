@@ -1,0 +1,93 @@
+---
+title: "Using rayshader to visualize Lake Zurich"
+author: "Nils Ratnaweera"
+date: "2020-06-06T23:00:00+01:00"
+categories: ["R"]
+tags: ["podcast","R"]
+---
+
+
+
+<pre class="r"><code>
+library(raster)
+library(sf)
+library(tidyverse)
+
+library(rayshader)
+library(lazyraster)
+library(geoviz)</code></pre>
+<p>I’ve long wanted to try out the <a href="https://www.rayshader.com/"><code>rayshader</code></a> package, and here’s my blogpost visualizing the area where I live and work. I started out using the <a href="https://shop.swisstopo.admin.ch/en/products/free/free_geodata">swisstopo’s DHM25_200 dataset</a>, which is an elevation model with 200m resolution provided free of charge by swisstopo. I later switched to the DEM which can easily be accessed with the function <code>mapzen_dem</code> from the <code>geoviz</code> package, which has a 25m resolution.</p>
+<pre class="r"><code># I&#39;ve run the function only once and saved the output locally
+# dhm &lt;- mapzen_dem(47.19552, 8.67463, 10)
+# writeRaster(dhm,&quot;dhm_mapzen.tif&quot;)</code></pre>
+<p>The function returns a classical raster dataset in WGS84.</p>
+<pre class="r"><code>dhm &lt;- raster(&quot;dhm_mapzen.tif&quot;)
+dhm
+## class      : RasterLayer 
+## dimensions : 783, 778, 609174  (nrow, ncol, ncell)
+## resolution : 0.000687, 0.000466  (x, y)
+## extent     : 8.434065, 8.968551, 47.03673, 47.40161  (xmin, xmax, ymin, ymax)
+## crs        : +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 
+## source     : C:/Users/rata/switchdrive/Projekte/0002_MyBlog/content/post/2020_06_04_rayshader/dhm_mapzen.tif 
+## names      : dhm_mapzen 
+## values     : 387.7736, 2252.416  (min, max)</code></pre>
+<p>Swisstopo provides satellite images in the “free geodata” section of their <a href="https://shop.swisstopo.admin.ch/en/products/free/free_geodata">homepage</a>, which I want to use as an overlay for the <code>rayshader</code> visualisation.</p>
+<pre class="r"><code>landsat &lt;- brick(&quot;C:/Users/rata/Geodata/Landsat_25/LandsatMos25.tif&quot;)
+crs(landsat) &lt;- st_crs(21781)$proj4string</code></pre>
+<p>Since they are in different coordinate system, at least one of the datasets needs to be projected. I prefer to work in the (projected) swiss coordinate system and will use the old one (EPSG 21781) since that is the coordinate system which the landsat dataset is in.</p>
+<pre class="r"><code>dhm &lt;- projectRaster(dhm, crs = crs(landsat),method = &quot;bilinear&quot;)
+dhm
+## class      : RasterLayer 
+## dimensions : 806, 801, 645606  (nrow, ncol, ncell)
+## resolution : 52, 51.8  (x, y)
+## extent     : 674880.9, 716532.9, 209721.6, 251472.4  (xmin, xmax, ymin, ymax)
+## crs        : +proj=somerc +lat_0=46.95240555555556 +lon_0=7.439583333333333 +k_0=1 +x_0=600000 +y_0=200000 +ellps=bessel +towgs84=674.374,15.056,405.346,0,0,0,0 +units=m +no_defs 
+## source     : memory
+## names      : dhm_mapzen 
+## values     : 387.7736, 2247.872  (min, max)</code></pre>
+<p>With the projection, the DEM now has a funky resolution and extent. This would cause problems later on so I will create a new, clean raster dataset and extract the values from the DEM to prevent this.</p>
+<pre class="r"><code>
+# Round xmin to the next higher multiple of 25
+xmn &lt;- ceiling(extent(dhm)@xmin/25)*25
+
+# Round xmin to the next lower multiple of 25
+
+xmx &lt;- floor(extent(dhm)@xmax/25)*25
+ymn &lt;- ceiling(extent(dhm)@ymin/25)*25
+ymx &lt;- floor(extent(dhm)@ymax/25)*25
+
+dhm2 &lt;- raster(res = res(landsat),xmn = xmn, xmx = xmx, ymn = ymn, ymx = ymx, vals = 1)
+
+dhm2 &lt;- raster::resample(dhm,dhm2)</code></pre>
+<p>Now I need to convert the raster to a matrix so that I can use it in <code>rayshader</code>. The <code>raster</code> package provides an <code>as.matrix()</code> method for rasters, but <code>rayshader</code> has a custom function for this. Also, I can <code>crop</code> the landsat image to the extent of the DEM.</p>
+<pre class="r"><code>dhm_mat &lt;- raster_to_matrix(dhm2)
+
+landsat &lt;- crop(landsat, dhm2)</code></pre>
+<p>In order to use the <code>landsat</code> dataset as an overlay, we need to convert our raster dataset in the following manner:</p>
+<ul>
+<li>rescale the values to 0 - 1 (instead of 0 - 255)</li>
+<li>add a fourth layer to represent alpha (there probably is a better way to do this, but I don’t know how)</li>
+<li>convert the 4 layers into a 3-dimensional matrix</li>
+<li>transpose each matrix, since since rasters and matrices are oriented differently in R</li>
+</ul>
+<pre class="r"><code>landsat_mat_list &lt;- lapply(as.list(landsat), function(x){t(raster_to_matrix(x)/255)})
+landsat_mat_list[[4]] &lt;- t(raster_to_matrix(raster(nrows = nrow(landsat), ncols = ncol(landsat), ext = extent(landsat), resolution = raster::res(landsat), vals = 0.9)))</code></pre>
+<p>I then can bind these four layers together with the function <code>abind::abind</code>:</p>
+<pre class="r"><code>library(abind)
+landsat_mat &lt;- do.call(abind,list(landsat_mat_list,along = 3))
+
+zscale &lt;- 15</code></pre>
+<pre class="r"><code>dhm_mat %&gt;%
+  sphere_shade(texture = &quot;desert&quot;) %&gt;%
+    add_overlay(landsat_mat) %&gt;%
+  # add_water(detect_water(dhm_mat), color = &quot;desert&quot;) %&gt;%
+  add_shadow(ray_shade(dhm_mat), 0.5) %&gt;%
+  add_shadow(ambient_shade(dhm_mat), 0) %&gt;%
+  plot_3d(dhm_mat, zscale = zscale,fov = 0, theta = 160, zoom = 0.5, phi = 35, windowsize = c(1000, 1000),baseshape = &quot;circle&quot;) 
+
+
+
+Sys.sleep(0.5)
+
+render_snapshot(filename = &quot;rayshade.png&quot;)</code></pre>
+<p><img src="/img/rayshade.png" width="120%" style="display: block; margin: auto;" /></p>

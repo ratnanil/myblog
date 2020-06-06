@@ -8,7 +8,6 @@ tags: ["podcast","R"]
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE)
-knitr::opts_chunk$get()
 if(is.null(knitr::opts_knit$get("rmarkdown.pandoc.to"))){
   setwd("content/post/2020_02_29_Raumzeit")
 }

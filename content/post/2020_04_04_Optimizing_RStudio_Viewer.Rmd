@@ -39,27 +39,9 @@ For this case, it would be ideal if `View` was a generic, similar to `print` or 
 
 (I'm not sure if I've got the terminology right, but you can read up on this stuff in Hadley's [amazing Advanced R Book](https://adv-r.hadley.nz/s3.html#s3-arguments)).
 
-If View were a generic, we could just define a custom method to said generic and *voilà*. Unfortunately, `View` is *not* a generic, you can check this by typing `View` into the console  and comparing it to `plot` (which is a generic).
+If View were a generic, we could just define a custom method to said generic and *voilà*. Unfortunately, it's not that simple and we have to turn `View` into a generic with `UseMethod()`:
 
-```{r, eval=FALSE}
-View
-```
-
-```{r }
-## function (...) 
-## .rs.callAs(name, hook, original, ...)
-## <environment: 0x0000025a2344eec8>
-```
-
-```{r}
-plot
-```
-
-
-
-We can turn `View` into a generic with `UseMethod()`:
-
-(Hadley states in his book that writing a method is considered "exceedingly bad manners" if you don't own the generic or the class. But since I doing all this in my own, private R-Session this is probably OK)
+(Hadley states in his book that writing a method is considered "exceedingly bad manners" if you don't own the generic or the class. But since I'm doing this in my own, private R-Session this is probably OK)
 
 ```{r}
 View <- function(x, title) {
@@ -67,9 +49,7 @@ View <- function(x, title) {
 }
 ```
 
-Then, we can define a default method for `View`. We can't use `utils::View` for this, since Rstudio overrides `View` on the search path (within the package `utils` environment). Since it's not overwritten in the utils namespace, we can use `get`. 
-
-(This is taken from [this stack-overflow Question](https://stackoverflow.com/q/41532300/4139249)).
+Next we can define a default method for `View`. We can't use `utils::View` for this, since [Rstudio overrides `View` on the search path](https://stackoverflow.com/q/41532300/4139249) (within the package `utils` environment). Since it's not overwritten in the utils namespace, we can use `get`. 
 
 ```{r}
 View.default <- function(...) {
@@ -142,6 +122,6 @@ We can now see the geometry type of each feature and the title matches the varia
 
 ## Make this the default behaviour
 
-Using `View()` on `sf`-objects should now be much faster and more lightweight. To use this custom Version of `View()` in every R Session, I will now add the above code lines to my [.Rprofile](https://rstats.wtf/r-startup.html#rprofile). You can edit your rprofile by typing `usethis::edit_r_profile()` into the console if you have the package `usethis`, or [locating the file manually](https://stackoverflow.com/q/13735745/4139249) if you don't.
+Using `View()` on `sf`-objects should now be much faster and more lightweight. To use this custom Version of `View()` in every R Session, you can add the above code lines to your [.Rprofile](https://rstats.wtf/r-startup.html#rprofile). Edit your Rprofile by typing `usethis::edit_r_profile()` into the console if you have the package `usethis`, or [locating the file manually](https://stackoverflow.com/q/13735745/4139249) if you don't.
 
 
