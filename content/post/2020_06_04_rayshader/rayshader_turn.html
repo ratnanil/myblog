@@ -1,0 +1,159 @@
+---
+title: "Animating with Rayshader"
+author: "Nils Ratnaweera"
+date: "2020-06-09T22:00:00+01:00"
+categories: ["R"]
+---
+
+
+
+<pre class="r"><code>
+library(raster)
+library(sf)
+library(tidyverse)
+
+library(rayshader)
+library(lazyraster)
+library(geoviz)</code></pre>
+<pre class="r"><code>rgl::clear3d()
+
+map(1:360, function(i){
+  tryCatch({
+    plot_3d(hillshade = hill, heightmap = dem_mat, windowsize = c(1000, 600), zscale = zscale, theta = i, zoom = 0.5, phi = 35, baseshape = &quot;circle&quot;)
+  },error = function(cond){})
+  
+  render_snapshot(file.path(here_post,&quot;turn&quot;,paste0(&quot;theta_&quot;,str_pad(i,3,pad = &quot;0&quot;),&quot;.png&quot;)),title_text = &quot;Lake Zurich&quot;)
+  rgl::clear3d()
+  print(i/360)
+})</code></pre>
+<p>Once you have all the *.png files in a single folder, you can use image magick to stich them all together in a single gif like so:</p>
+<pre class="bash"><code>magick convert -delay 4 -loop 0 *.png turn.gif</code></pre>
+<p><img src="/img/2020_06_04_rayshader/turn.gif" /></p>
+<p>There are several packages for calculating the sun’s position on a given day, at a given time at a given location. However, you can also calculate it on your own using the following function (posted on <a href="https://stackoverflow.com/a/8764866/4139249">stackoverflow</a>).</p>
+<pre class="r"><code>sunPosition &lt;- function(year, month, day, hour=12, min=0, sec=0,
+                        lat=46.5, long=6.5) {
+  
+  twopi &lt;- 2 * pi
+  deg2rad &lt;- pi / 180
+  
+  # Get day of the year, e.g. Feb 1 = 32, Mar 1 = 61 on leap years
+  month.days &lt;- c(0,31,28,31,30,31,30,31,31,30,31,30)
+  day &lt;- day + cumsum(month.days)[month]
+  leapdays &lt;- year %% 4 == 0 &amp; (year %% 400 == 0 | year %% 100 != 0) &amp; 
+    day &gt;= 60 &amp; !(month==2 &amp; day==60)
+  day[leapdays] &lt;- day[leapdays] + 1
+  
+  # Get Julian date - 2400000
+  hour &lt;- hour + min / 60 + sec / 3600 # hour plus fraction
+  delta &lt;- year - 1949
+  leap &lt;- trunc(delta / 4) # former leapyears
+  jd &lt;- 32916.5 + delta * 365 + leap + day + hour / 24
+  
+  # The input to the Atronomer&#39;s almanach is the difference between
+  # the Julian date and JD 2451545.0 (noon, 1 January 2000)
+  time &lt;- jd - 51545.
+  
+  # Ecliptic coordinates
+  
+  # Mean longitude
+  mnlong &lt;- 280.460 + .9856474 * time
+  mnlong &lt;- mnlong %% 360
+  mnlong[mnlong &lt; 0] &lt;- mnlong[mnlong &lt; 0] + 360
+  
+  # Mean anomaly
+  mnanom &lt;- 357.528 + .9856003 * time
+  mnanom &lt;- mnanom %% 360
+  mnanom[mnanom &lt; 0] &lt;- mnanom[mnanom &lt; 0] + 360
+  mnanom &lt;- mnanom * deg2rad
+  
+  # Ecliptic longitude and obliquity of ecliptic
+  eclong &lt;- mnlong + 1.915 * sin(mnanom) + 0.020 * sin(2 * mnanom)
+  eclong &lt;- eclong %% 360
+  eclong[eclong &lt; 0] &lt;- eclong[eclong &lt; 0] + 360
+  oblqec &lt;- 23.439 - 0.0000004 * time
+  eclong &lt;- eclong * deg2rad
+  oblqec &lt;- oblqec * deg2rad
+  
+  # Celestial coordinates
+  # Right ascension and declination
+  num &lt;- cos(oblqec) * sin(eclong)
+  den &lt;- cos(eclong)
+  ra &lt;- atan(num / den)
+  ra[den &lt; 0] &lt;- ra[den &lt; 0] + pi
+  ra[den &gt;= 0 &amp; num &lt; 0] &lt;- ra[den &gt;= 0 &amp; num &lt; 0] + twopi
+  dec &lt;- asin(sin(oblqec) * sin(eclong))
+  
+  # Local coordinates
+  # Greenwich mean sidereal time
+  gmst &lt;- 6.697375 + .0657098242 * time + hour
+  gmst &lt;- gmst %% 24
+  gmst[gmst &lt; 0] &lt;- gmst[gmst &lt; 0] + 24.
+  
+  # Local mean sidereal time
+  lmst &lt;- gmst + long / 15.
+  lmst &lt;- lmst %% 24.
+  lmst[lmst &lt; 0] &lt;- lmst[lmst &lt; 0] + 24.
+  lmst &lt;- lmst * 15. * deg2rad
+  
+  # Hour angle
+  ha &lt;- lmst - ra
+  ha[ha &lt; -pi] &lt;- ha[ha &lt; -pi] + twopi
+  ha[ha &gt; pi] &lt;- ha[ha &gt; pi] - twopi
+  
+  # Latitude to radians
+  lat &lt;- lat * deg2rad
+  
+  # Azimuth and elevation
+  el &lt;- asin(sin(dec) * sin(lat) + cos(dec) * cos(lat) * cos(ha))
+  az &lt;- asin(-cos(dec) * sin(ha) / cos(el))
+  
+  # For logic and names, see Spencer, J.W. 1989. Solar Energy. 42(4):353
+  cosAzPos &lt;- (0 &lt;= sin(dec) - sin(el) * sin(lat))
+  sinAzNeg &lt;- (sin(az) &lt; 0)
+  az[cosAzPos &amp; sinAzNeg] &lt;- az[cosAzPos &amp; sinAzNeg] + twopi
+  az[!cosAzPos] &lt;- pi - az[!cosAzPos]
+  
+
+  el &lt;- el / deg2rad
+  az &lt;- az / deg2rad
+  lat &lt;- lat / deg2rad
+  
+  return(list(elevation=el, azimuth=az))
+}</code></pre>
+<pre class="r"><code>
+seq &lt;- seq(5,18,0.05)
+starttime &lt;- Sys.time()
+map_dfr(seq, function(hour_dec){
+  hour = as.integer(hour_dec %/% 1)
+  minute = as.integer((hour_dec %% 1)*60)
+  sunPosition(2020, 7, 21, hour=hour, min=minute, sec=0, lat=47.19552, long=8.67463) %&gt;%
+    as_tibble() %&gt;%
+    mutate(hour = hour, minute = minute, hour_dec = hour_dec)
+}) %&gt;%View
+  # head(1) %&gt;%
+  pmap(function(elevation,azimuth,hour,minute,hour_dec){
+    
+    
+    hour_minute_fname &lt;- paste(str_pad(hour,2,pad = &quot;0&quot;),str_pad(minute,2,pad = &quot;0&quot;),sep = &quot;_&quot;)
+    hour_minute_title &lt;- paste(str_pad(hour,2,pad = &quot;0&quot;),str_pad(minute,2,pad = &quot;0&quot;),sep = &quot;:&quot;)
+    hill2 &lt;- add_shadow(hillshade = hill, shadowmap = ray_shade(dem_mat,sunaltitude = elevation,sunangle = azimuth), max_darken = 0.5)
+
+    tryCatch({
+      
+      plot_3d(hillshade = hill2, heightmap = dem_mat, windowsize = c(1000, 600), zscale = zscale, theta = 160, zoom = 0.5, phi = 35, baseshape = &quot;circle&quot;)
+    
+      
+        },error = function(cond){})
+    
+    render_snapshot(file.path(here_post,&quot;turn2&quot;,paste0(&quot;hour_&quot;,hour_minute_fname,&quot;.png&quot;)),title_text = paste(&quot;Lake Zurich at&quot;,hour_minute_title))
+      
+    rgl::clear3d()
+    
+    perc &lt;- (i/length(seq))
+    
+    now &lt;- Sys.time()
+    eta &lt;- now+difftime(now,starttime,units = &quot;secs&quot;)/perc
+    print(paste0(round(perc*100,2), &quot;%. ETA: &quot;,eta))
+    
+  })
+</code></pre>

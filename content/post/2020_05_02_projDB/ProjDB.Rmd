@@ -1,6 +1,8 @@
 ---
-title: "Untitled"
-output: html_document
+title: "Visualizing the bounding boxes of local projections with projDB"
+author: "Nils Ratnaweera"
+date: "2020-06-10T19:00:00+01:00"
+categories: ["R"]
 ---
 
 ```{r setup, include=FALSE}
