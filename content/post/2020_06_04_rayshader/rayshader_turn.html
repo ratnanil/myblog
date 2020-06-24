@@ -121,7 +121,7 @@ map(1:360, function(i){
   return(list(elevation=el, azimuth=az))
 }</code></pre>
 <pre class="r"><code>
-seq &lt;- seq(5,18,0.05)
+seq &lt;- seq(5,18,0.1)
 starttime &lt;- Sys.time()
 map_dfr(seq, function(hour_dec){
   hour = as.integer(hour_dec %/% 1)
@@ -129,14 +129,14 @@ map_dfr(seq, function(hour_dec){
   sunPosition(2020, 7, 21, hour=hour, min=minute, sec=0, lat=47.19552, long=8.67463) %&gt;%
     as_tibble() %&gt;%
     mutate(hour = hour, minute = minute, hour_dec = hour_dec)
-}) %&gt;%View
-  # head(1) %&gt;%
-  pmap(function(elevation,azimuth,hour,minute,hour_dec){
+}) %&gt;%
+  mutate(i = row_number()) %&gt;%
+  pmap(function(elevation,azimuth,hour,minute,hour_dec,i){
     
     
     hour_minute_fname &lt;- paste(str_pad(hour,2,pad = &quot;0&quot;),str_pad(minute,2,pad = &quot;0&quot;),sep = &quot;_&quot;)
     hour_minute_title &lt;- paste(str_pad(hour,2,pad = &quot;0&quot;),str_pad(minute,2,pad = &quot;0&quot;),sep = &quot;:&quot;)
-    hill2 &lt;- add_shadow(hillshade = hill, shadowmap = ray_shade(dem_mat,sunaltitude = elevation,sunangle = azimuth), max_darken = 0.5)
+    hill2 &lt;- add_shadow(hillshade = hill, shadowmap = ray_shade(dem_mat,sunaltitude = elevation,sunangle = azimuth), max_darken = 0.2)
 
     tryCatch({
       
@@ -145,7 +145,7 @@ map_dfr(seq, function(hour_dec){
       
         },error = function(cond){})
     
-    render_snapshot(file.path(here_post,&quot;turn2&quot;,paste0(&quot;hour_&quot;,hour_minute_fname,&quot;.png&quot;)),title_text = paste(&quot;Lake Zurich at&quot;,hour_minute_title))
+    render_snapshot(file.path(here(&quot;ignore&quot;,&quot;turn_sun&quot;),paste0(&quot;hour_&quot;,hour_minute_fname,&quot;.png&quot;)),title_text = paste(&quot;Lake Zurich at&quot;,hour_minute_title))
       
     rgl::clear3d()
     
@@ -153,7 +153,6 @@ map_dfr(seq, function(hour_dec){
     
     now &lt;- Sys.time()
     eta &lt;- now+difftime(now,starttime,units = &quot;secs&quot;)/perc
-    print(paste0(round(perc*100,2), &quot;%. ETA: &quot;,eta))
-    
+    print(paste0(now,&quot;: &quot;,round(perc*100,2), &quot;%. ETA: &quot;,eta))
   })
 </code></pre>

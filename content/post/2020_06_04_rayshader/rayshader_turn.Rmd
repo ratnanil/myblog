@@ -163,7 +163,7 @@ sunPosition <- function(year, month, day, hour=12, min=0, sec=0,
 
 ```{r, eval = eval}
 
-seq <- seq(5,18,0.05)
+seq <- seq(5,18,0.1)
 starttime <- Sys.time()
 map_dfr(seq, function(hour_dec){
   hour = as.integer(hour_dec %/% 1)
@@ -171,14 +171,14 @@ map_dfr(seq, function(hour_dec){
   sunPosition(2020, 7, 21, hour=hour, min=minute, sec=0, lat=47.19552, long=8.67463) %>%
     as_tibble() %>%
     mutate(hour = hour, minute = minute, hour_dec = hour_dec)
-}) %>%View
-  # head(1) %>%
-  pmap(function(elevation,azimuth,hour,minute,hour_dec){
+}) %>%
+  mutate(i = row_number()) %>%
+  pmap(function(elevation,azimuth,hour,minute,hour_dec,i){
     
     
     hour_minute_fname <- paste(str_pad(hour,2,pad = "0"),str_pad(minute,2,pad = "0"),sep = "_")
     hour_minute_title <- paste(str_pad(hour,2,pad = "0"),str_pad(minute,2,pad = "0"),sep = ":")
-    hill2 <- add_shadow(hillshade = hill, shadowmap = ray_shade(dem_mat,sunaltitude = elevation,sunangle = azimuth), max_darken = 0.5)
+    hill2 <- add_shadow(hillshade = hill, shadowmap = ray_shade(dem_mat,sunaltitude = elevation,sunangle = azimuth), max_darken = 0.2)
 
     tryCatch({
       
@@ -187,7 +187,7 @@ map_dfr(seq, function(hour_dec){
       
         },error = function(cond){})
     
-    render_snapshot(file.path(here_post,"turn2",paste0("hour_",hour_minute_fname,".png")),title_text = paste("Lake Zurich at",hour_minute_title))
+    render_snapshot(file.path(here("ignore","turn_sun"),paste0("hour_",hour_minute_fname,".png")),title_text = paste("Lake Zurich at",hour_minute_title))
       
     rgl::clear3d()
     
@@ -195,14 +195,9 @@ map_dfr(seq, function(hour_dec){
     
     now <- Sys.time()
     eta <- now+difftime(now,starttime,units = "secs")/perc
-    print(paste0(round(perc*100,2), "%. ETA: ",eta))
-    
+    print(paste0(now,": ",round(perc*100,2), "%. ETA: ",eta))
   })
 
 
 
-
 ```
-
-
-

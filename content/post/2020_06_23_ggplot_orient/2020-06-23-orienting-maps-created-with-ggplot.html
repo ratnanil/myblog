@@ -1,0 +1,57 @@
+---
+title: Orienting maps away from north in R (ggplot / tmap)
+author: Nils
+date: '2020-06-23'
+slug: orienting-maps-created-with-ggplot
+categories:
+  - R
+  - sf
+tags:
+  - GIS
+  - sf
+  - R
+---
+
+
+
+<p>I recently mad a map of a river segment which had a northwest to southeast orientation, and thus was oriented “diagonally” when looking towards north. The map had lots of white, unused space, and since orientation towards north did not matter in that perticular case, I wanted to orient my image so that the river was “horizontal” and takes up less space in my document.</p>
+<p>After some research, I found no elegant solution to do this with <code>ggplot</code> or <code>tmap</code>. I therefore did it in an inelegant, “hacky” way that I want to document quickly for future use.</p>
+<p>In this example, I use the lake of zurich from the Corine Land Cover dataset (2018), which I downloaded from <a href="https://www.wsl.ch/de/projekte/corine-schweiz.html">here</a> (after downloading the dataset, I exported the lake into a .gpkg file).</p>
+<p>This is what the original plot looks like:</p>
+<pre class="r"><code>
+library(sf)
+library(tidyverse)
+library(knitr)
+
+lake_zurich &lt;- read_sf(pathto_file)
+
+ggplot(lake_zurich) + 
+  geom_sf() +
+  theme_void()</code></pre>
+<p><img src="/post/2020_06_23_ggplot_orient/2020-06-23-orienting-maps-created-with-ggplot_files/figure-html/unnamed-chunk-3-1.png" width="100%" /></p>
+<pre class="r"><code>
+ggsave(pathto_image)</code></pre>
+<p>To rotate the map, I first saved it as a png and the read imported that image with the library <code>magick</code>. I can then simply rotate the image to the angle that I want and then need to trim the image using <code>image_trim</code>.</p>
+<pre class="r"><code>
+library(magick)
+
+myplot &lt;- image_read(pathto_image)
+
+myplot_rotated &lt;- myplot %&gt;%
+  image_rotate(-30) %&gt;%
+  image_trim()
+
+
+myplot_rotated</code></pre>
+<p><img src="/post/2020_06_23_ggplot_orient/2020-06-23-orienting-maps-created-with-ggplot_files/figure-html/unnamed-chunk-4-1.png" width="100%" /></p>
+<p>To add a north arrow, I looked for a nice northarrow image on the web, imported it with <code>image_read</code> and made a composite image out of the two images.</p>
+<pre class="r"><code>
+north_arrow &lt;- image_read(pathto_northarrow)
+
+image_composite(myplot_rotated, north_arrow %&gt;%
+                    image_rotate(-30) %&gt;%
+                    image_trim() %&gt;%
+                    # adjust geometry and position so it fits nicely
+                    image_resize(geometry = &quot;150x&quot;),gravity = &quot;southeast&quot;)</code></pre>
+<p><img src="/post/2020_06_23_ggplot_orient/2020-06-23-orienting-maps-created-with-ggplot_files/figure-html/unnamed-chunk-5-1.png" width="100%" /></p>
+<p>Note that this approach only works since I used <code>theme_void</code>. It will not work if you want graticules, the background grid anything else that gives away the original orientation!</p>
